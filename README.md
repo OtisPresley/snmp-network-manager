@@ -72,13 +72,14 @@ SNMP Network Manager discovers, correlates, and visualizes your physical and wir
 
 ## 📘 Documentation
 
-Comprehensive, step-by-step guides are hosted in the **[GitHub Wiki](https://github.com/OtisPresley/snmp-network-manager/wiki)**:
+Comprehensive, step-by-step guides are hosted in the **[GitHub Wiki](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Home)**:
 
-- 📦 **[Installation & Prerequisites](https://github.com/OtisPresley/snmp-network-manager/wiki/Installation)** – Setup requirements and HACS installation.
-- ⚙️ **[Integration Configuration](https://github.com/OtisPresley/snmp-network-manager/wiki/Integration-Configuration)** – Walkthrough of exclusion options, retention periods, and polling intervals.
-- 🗺️ **[Lovelace Map Card Configuration](https://github.com/OtisPresley/snmp-network-manager/wiki/Lovelace-Card)** – Card layout options, themes, pan/zoom controls, and node customization.
-- 🔗 **[Device Correlation & Manual Linkage](https://github.com/OtisPresley/snmp-network-manager/wiki/Device-Correlation)** – Understanding composite device grouping and manual MAC-to-device mapping.
-- 🛠️ **[Troubleshooting & FAQ](https://github.com/OtisPresley/snmp-network-manager/wiki/Troubleshooting)** – Resolving missing edges, reverse DNS caching, and orphan node cleanup.
+- 🏠 **[Network Manager Overview](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Home)** – Architecture overview, SNMP Switch Manager synergy, and capabilities.
+- 📦 **[Installation & Prerequisites](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Installation)** – Setup requirements and HACS installation.
+- ⚙️ **[Integration Configuration](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Configuration)** – Walkthrough of exclusion options, retention periods, and polling intervals.
+- 🗺️ **[Lovelace Map Card Configuration](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Card)** – Card layout options, themes, pan/zoom controls, and node customization.
+- 🔗 **[Device Correlation & Manual Linkage](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Correlation)** – Understanding composite device grouping and manual MAC-to-device mapping.
+- 🛠️ **[Troubleshooting & FAQ](https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Troubleshooting)** – Resolving missing edges, reverse DNS caching, and orphan node cleanup.
 
 ---
 

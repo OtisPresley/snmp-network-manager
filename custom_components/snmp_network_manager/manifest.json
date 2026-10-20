@@ -12,7 +12,7 @@
     "frontend",
     "http"
   ],
-  "documentation": "https://github.com/OtisPresley/snmp-network-manager/wiki",
+  "documentation": "https://github.com/OtisPresley/snmp-switch-manager/wiki/Network-Manager-Home",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "version": "0.1.0"
