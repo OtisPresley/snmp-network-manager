@@ -1,5 +1,10 @@
+import os
 import sys
+import types
+import unittest
 from unittest.mock import MagicMock
+
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 # Mock voluptuous
 mock_vol = MagicMock()
@@ -27,40 +32,60 @@ class MockStore:
     async def async_save(self, data):
         pass
 
-# Mock device_registry and entity_registry helpers
 mock_dr = MagicMock()
 mock_er = MagicMock()
 
 mock_storage = MagicMock()
 mock_storage.Store = MockStore
 
-mock_helpers = MagicMock()
-mock_helpers.device_registry = mock_dr
-mock_helpers.entity_registry = mock_er
-mock_helpers.storage = mock_storage
+mock_cv = MagicMock()
+mock_cv.config_entry_only_config_schema = lambda domain: MagicMock()
 
-sys.modules['homeassistant'] = MagicMock()
-sys.modules['homeassistant.core'] = MagicMock()
-sys.modules['homeassistant.core'].HomeAssistant = MockHomeAssistant
-sys.modules['homeassistant.components'] = MagicMock()
-sys.modules['homeassistant.components.websocket_api'] = MagicMock()
-sys.modules['homeassistant.config_entries'] = MagicMock()
-sys.modules['homeassistant.config_entries'].ConfigEntry = MagicMock()
+# Setup modules using types.ModuleType for full Python import machinery compatibility
+ha = types.ModuleType("homeassistant")
+ha_core = types.ModuleType("homeassistant.core")
+ha_core.HomeAssistant = MockHomeAssistant
 
-sys.modules['homeassistant.helpers'] = mock_helpers
-sys.modules['homeassistant.helpers.device_registry'] = mock_dr
-sys.modules['homeassistant.helpers.entity_registry'] = mock_er
-sys.modules['homeassistant.helpers.storage'] = mock_storage
+ha_components = types.ModuleType("homeassistant.components")
+ha_components_ws = types.ModuleType("homeassistant.components.websocket_api")
+ha_components_ws.websocket_command = lambda schema: lambda f: f
+ha_components_ws.async_response = lambda f: f
+ha_components_ws.ActiveConnection = MagicMock
 
-# Now import path setup and custom component module
-import unittest  # noqa: E402
-import os  # noqa: E402
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+ha_components_http = types.ModuleType("homeassistant.components.http")
+ha_components_http.StaticPathConfig = MagicMock
+
+ha_config_entries = types.ModuleType("homeassistant.config_entries")
+ha_config_entries.ConfigEntry = MagicMock
+
+ha_helpers = types.ModuleType("homeassistant.helpers")
+ha_helpers.device_registry = mock_dr
+ha_helpers.entity_registry = mock_er
+ha_helpers.storage = mock_storage
+ha_helpers.config_validation = mock_cv
+
+ha_helpers_dr = types.ModuleType("homeassistant.helpers.device_registry")
+ha_helpers_er = types.ModuleType("homeassistant.helpers.entity_registry")
+ha_helpers_storage = types.ModuleType("homeassistant.helpers.storage")
+ha_helpers_storage.Store = MockStore
+ha_helpers_cv = mock_cv
+
+sys.modules['homeassistant'] = ha
+sys.modules['homeassistant.core'] = ha_core
+sys.modules['homeassistant.components'] = ha_components
+sys.modules['homeassistant.components.websocket_api'] = ha_components_ws
+sys.modules['homeassistant.components.http'] = ha_components_http
+sys.modules['homeassistant.config_entries'] = ha_config_entries
+sys.modules['homeassistant.helpers'] = ha_helpers
+sys.modules['homeassistant.helpers.device_registry'] = ha_helpers_dr
+sys.modules['homeassistant.helpers.entity_registry'] = ha_helpers_er
+sys.modules['homeassistant.helpers.storage'] = ha_helpers_storage
+sys.modules['homeassistant.helpers.config_validation'] = ha_helpers_cv
 
 from custom_components.snmp_network_manager.topology import (  # noqa: E402
     find_correlated_device,
-    resolve_device_state,
     get_all_device_entities,
+    resolve_device_state,
 )
 
 class MockDevice:

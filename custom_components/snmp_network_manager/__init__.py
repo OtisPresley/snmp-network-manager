@@ -7,6 +7,7 @@ import re
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
@@ -27,6 +28,8 @@ from .topology import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 @websocket_api.websocket_command({
     vol.Required("type"): "snmp_network_manager/get_topology",
