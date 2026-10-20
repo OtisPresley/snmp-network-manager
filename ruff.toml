@@ -6,4 +6,4 @@ select = ["E", "F"]
 ignore = ["E501"]
 
 [lint.per-file-ignores]
-"test_correlation.py" = ["E402"]
+"tests/*" = ["E402"]

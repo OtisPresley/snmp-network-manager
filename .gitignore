@@ -10,6 +10,5 @@ inspect_topology.py
 
 # Local testing and scratch
 scratch/
-tests/
 deploy.sh
 deploy*.sh
