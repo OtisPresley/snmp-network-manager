@@ -42,6 +42,12 @@ SNMP Network Manager discovers, correlates, and visualizes your physical and wir
 
 ---
 
+<div align="center">
+  <img width="900" alt="image" src="https://github.com/user-attachments/assets/8d53635c-f089-410b-9790-52131ae2b415" />
+</div>
+
+---
+
 ## 🛠️ Requirements
 
 - **Home Assistant**: version 2025.11.2 or newer (recommended).
