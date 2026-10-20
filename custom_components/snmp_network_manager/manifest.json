@@ -1,13 +1,13 @@
 {
   "domain": "snmp_network_manager",
   "name": "SNMP Network Manager",
+  "after_dependencies": [
+    "snmp_switch_manager"
+  ],
   "codeowners": [
     "@OtisPresley"
   ],
   "config_flow": true,
-  "after_dependencies": [
-    "snmp_switch_manager"
-  ],
   "dependencies": [
     "frontend",
     "http"
