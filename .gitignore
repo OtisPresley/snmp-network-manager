@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.DS_Store
+*.db
+snmp_network_topology_db
+snapshot_debug.json
+inspect_topology.py
+
+# Local testing and scratch
+scratch/
+tests/
+deploy.sh
+deploy*.sh

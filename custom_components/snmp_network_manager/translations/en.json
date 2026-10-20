@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configure SNMP Network Manager",
+        "description": "Initialize the SNMP Network Manager to discover and map network topology."
+      }
+    },
+    "error": {
+      "single_instance_allowed": "Only a single instance of SNMP Network Manager is allowed."
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance of SNMP Network Manager is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure SNMP Network Manager Options",
+        "description": "Customize background scanning behavior, exclusions, and database cleanup settings.",
+        "data": {
+           "scan_interval": "Scan Interval (seconds)",
+          "stale_days": "Stale Device Cleanup Threshold (days)",
+          "history_days": "State History Retention (days)",
+          "exclude_macs": "Excluded MAC Addresses (comma-separated)",
+          "exclude_ips": "Excluded IP Addresses / Ranges (comma-separated)",
+          "exclude_names": "Excluded Names (comma-separated, partial matches)"
+        }
+      }
+    }
+  }
+}
