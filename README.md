@@ -8,7 +8,7 @@
 [![HACS](https://img.shields.io/github/actions/workflow/status/OtisPresley/snmp-network-manager/hacs.yaml?branch=main&label=HACS)](https://github.com/OtisPresley/snmp-network-manager/actions/workflows/hacs.yaml)
 [![CI](https://img.shields.io/github/actions/workflow/status/OtisPresley/snmp-network-manager/ci.yaml?branch=main&event=push)](https://github.com/OtisPresley/snmp-network-manager/actions/workflows/ci.yaml)
 
-SNMP Network Manager discovers, correlates, and visualizes your physical and wireless network topology in **Home Assistant**. By seamlessly integrating with **SNMP Switch Manager** and interrogating Bridge-MIB, Q-BRIDGE-MIB (FDB), ARP tables, and LLDP neighbors, it constructs a real-time, interactive hierarchical network map complete with port links, device status, and automatic Home Assistant registry binding.
+SNMP Network Manager discovers, correlates, and visualizes your physical and wireless network topology in **Home Assistant**. By seamlessly integrating with **[SNMP Switch Manager](https://github.com/OtisPresley/snmp-switch-manager)** and interrogating Bridge-MIB, Q-BRIDGE-MIB (FDB), ARP tables, and LLDP neighbors, it constructs a real-time, interactive hierarchical network map complete with port links, device status, and automatic Home Assistant registry binding.
 
 ---
 
@@ -30,7 +30,7 @@ SNMP Network Manager discovers, correlates, and visualizes your physical and wir
 ## ✨ Core Highlights
 
 - 🗺️ **Interactive Network Topology Map**: High-performance SVG visualizer with smooth pan, zoom, dynamic aspect-ratio resizing, node dragging, and detailed port-level link tooltips.
-- 🔌 **Native SNMP Switch Manager Synergy**: Connects directly to existing `snmp_switch_manager` configurations—no duplicate SNMP credentials, community strings, or polling setups required.
+- 🔌 **Native SNMP Switch Manager Synergy**: Connects directly to existing **[SNMP Switch Manager](https://github.com/OtisPresley/snmp-switch-manager)** configurations—no duplicate SNMP credentials, community strings, or polling setups required.
 - 🖧 **Automated L2/L3 Topology Discovery**: Interrogates Bridge-MIB and Q-BRIDGE-MIB Forwarding Databases (FDB), switch ARP tables, and LLDP remote system tables to map exact switch-to-switch and switch-to-client connections.
 - 📶 **Universal Wireless Client Correlation**: Automatically maps wireless devices to their connected Access Points across UniFi, pfSense, Omada, ASUS, OpenWrt, or generic router integrations without manual configuration or external dependencies.
 - 💤 **Smart Asleep vs. Down State Resolution**: Intelligently differentiates battery-powered and sleeping devices (asleep) from truly disconnected or unreachable network nodes (down) using native Home Assistant entity tracking.
@@ -51,7 +51,7 @@ SNMP Network Manager discovers, correlates, and visualizes your physical and wir
 ## 🛠️ Requirements
 
 - **Home Assistant**: version 2025.11.2 or newer (recommended).
-- **SNMP Switch Manager**: integration installed and configured with at least one managed switch.
+- **[SNMP Switch Manager](https://github.com/OtisPresley/snmp-switch-manager)**: integration installed and configured with at least one managed switch.
 - **Network Devices**: Switches and Access Points supporting standard MIBs (Bridge-MIB, Q-BRIDGE-MIB, or LLDP).
 
 ---
