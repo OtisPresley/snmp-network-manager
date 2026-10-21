@@ -253,6 +253,25 @@ def is_switch_device(name: str, sys_descr: str, dev) -> bool:
     return False
 
 
+def is_hardware_integration_device(dev) -> bool:
+    """Check if a device has identifiers from a physical hardware integration (ignoring SNMP and package managers)."""
+    if not dev:
+        return False
+    idents = getattr(dev, "identifiers", None)
+    if not idents:
+        return True
+    ignored = {"snmp_network_manager", "snmp_switch_manager", "hacs"}
+    return any(ident[0] not in ignored for ident in idents)
+
+
+def get_name_words(val: str) -> set:
+    """Extract lowercase alphanumeric word tokens of length >= 2 from a name."""
+    if not val:
+        return set()
+    cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", str(val).lower())
+    return {w for w in cleaned.split() if len(w) > 1}
+
+
 def find_correlated_device(hass: HomeAssistant, mac: str, ip: str, name: str):
     """Find a matching Home Assistant device for an SNMP endpoint."""
     from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -262,24 +281,94 @@ def find_correlated_device(hass: HomeAssistant, mac: str, ip: str, name: str):
     
     normalized_mac = mac.replace(":", "").replace("-", "").upper() if mac else ""
     
+    def _has_rich_entities(device_id):
+        if not device_id or not ent_reg:
+            return False
+        d_entries = []
+        if hasattr(er, "async_entries_for_device"):
+            d_entries = er.async_entries_for_device(ent_reg, device_id, include_disabled_entities=False)
+        elif hasattr(ent_reg, "async_entries_for_device"):
+            d_entries = ent_reg.async_entries_for_device(device_id, include_disabled_entities=False)
+        return any(
+            getattr(e, "domain", None) != "device_tracker"
+            and getattr(e, "platform", None) not in ("snmp_network_manager", "snmp_switch_manager", "hacs")
+            for e in d_entries
+        )
+
+    roaming_keywords = {"laptop", "phone", "ipad", "iphone", "macbook", "workstation", "pc", "desktop", "tablet", "computer"}
+
+    def _find_by_name(node_name, require_rich=False):
+        if not node_name:
+            return None
+        t_name = normalize_name(node_name)
+        if len(t_name) <= 2:
+            return None
+        t_words = get_name_words(node_name)
+        is_roam = any(k in t_words for k in roaming_keywords)
+
+        # 4a. Exact name match against physical hardware devices
+        for dev in dev_reg.devices:
+            dev_name = dev.name_by_user or dev.name
+            if dev_name and normalize_name(dev_name) == t_name:
+                if is_hardware_integration_device(dev):
+                    if not require_rich or _has_rich_entities(dev.id):
+                        return dev
+
+        if not is_roam:
+            # 4b. Manufacturer match + name containment (e.g. node 'WaterGuru' and dev 'WaterGuru Pool', manuf 'WaterGuru')
+            for dev in dev_reg.devices:
+                if not is_hardware_integration_device(dev):
+                    continue
+                manuf = normalize_name(dev.manufacturer)
+                dev_name = dev.name_by_user or dev.name
+                if manuf and manuf == t_name and len(t_name) >= 4:
+                    if dev_name and t_name in normalize_name(dev_name):
+                        if not require_rich or _has_rich_entities(dev.id):
+                            return dev
+
+            # 4c. Multi-word token subset match (e.g. dev 'Front Door' [2 words] in node 'Front Door Lock' [3 words])
+            fuzzy_matches = []
+            for dev in dev_reg.devices:
+                if not is_hardware_integration_device(dev):
+                    continue
+                dev_name = dev.name_by_user or dev.name
+                dev_words = get_name_words(dev_name)
+                if len(dev_words) >= 2 and dev_words.issubset(t_words):
+                    if not require_rich or _has_rich_entities(dev.id):
+                        fuzzy_matches.append((dev, len(dev_words)))
+                elif len(t_words) >= 2 and t_words.issubset(dev_words):
+                    if not require_rich or _has_rich_entities(dev.id):
+                        fuzzy_matches.append((dev, len(t_words)))
+
+            if fuzzy_matches:
+                fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
+                return fuzzy_matches[0][0]
+
+        return None
+
     def _finalize_device(dev):
         if not dev:
             return None
-        return get_primary_device(dev_reg, ent_reg, dev)
+        primary = get_primary_device(dev_reg, ent_reg, dev)
+        # If the matched device has no rich entities (e.g. only bare device_tracker from UniFi),
+        # prefer a hardware device matching by name that has rich entities (sensors, battery, locks, etc.)
+        if primary and name and not _has_rich_entities(primary.id):
+            rich_dev = _find_by_name(name, require_rich=True)
+            if rich_dev:
+                return get_primary_device(dev_reg, ent_reg, rich_dev)
+        return primary
 
     # 1. Search by MAC connection or identifier first
     if normalized_mac:
         for dev in dev_reg.devices:
             for conn in dev.connections:
                 if conn[1] and conn[1].replace(":", "").replace("-", "").upper() == normalized_mac:
-                    is_pure_snmp = dev.identifiers and all(ident[0] == "snmp_network_manager" or ident[0] == "snmp_switch_manager" for ident in dev.identifiers)
-                    if not is_pure_snmp:
+                    if is_hardware_integration_device(dev):
                         # Check name compatibility to prevent incorrect merges of roaming adapters
                         if name and dev.name:
                             n1 = normalize_name(name)
                             n2 = normalize_name(dev.name)
                             # Only enforce name check for personal roaming devices (laptops, phones, tablets, etc.)
-                            roaming_keywords = ["laptop", "phone", "ipad", "iphone", "macbook", "workstation", "pc", "desktop", "tablet", "computer"]
                             is_roaming = any(k in n1 or k in n2 for k in roaming_keywords)
                             if is_roaming:
                                 if len(n1) > 2 and len(n2) > 2 and n1 not in n2 and n2 not in n1:
@@ -287,14 +376,12 @@ def find_correlated_device(hass: HomeAssistant, mac: str, ip: str, name: str):
                         return _finalize_device(dev)
             for ident in dev.identifiers:
                 if ident[1] and ident[1].replace(":", "").replace("-", "").upper() == normalized_mac:
-                    is_pure_snmp = dev.identifiers and all(ident[0] == "snmp_network_manager" or ident[0] == "snmp_switch_manager" for ident in dev.identifiers)
-                    if not is_pure_snmp:
+                    if is_hardware_integration_device(dev):
                         # Check name compatibility to prevent incorrect merges of roaming adapters
                         if name and dev.name:
                             n1 = normalize_name(name)
                             n2 = normalize_name(dev.name)
                             # Only enforce name check for personal roaming devices (laptops, phones, tablets, etc.)
-                            roaming_keywords = ["laptop", "phone", "ipad", "iphone", "macbook", "workstation", "pc", "desktop", "tablet", "computer"]
                             is_roaming = any(k in n1 or k in n2 for k in roaming_keywords)
                             if is_roaming:
                                 if len(n1) > 2 and len(n2) > 2 and n1 not in n2 and n2 not in n1:
@@ -309,20 +396,17 @@ def find_correlated_device(hass: HomeAssistant, mac: str, ip: str, name: str):
                 if normalized_mac in uniq:
                     if entity.device_id:
                         dev = dev_reg.async_get(entity.device_id)
-                        if dev:
-                            is_pure_snmp = dev.identifiers and all(ident[0] == "snmp_network_manager" or ident[0] == "snmp_switch_manager" for ident in dev.identifiers)
-                            if not is_pure_snmp:
-                                # Check name compatibility to prevent incorrect merges of roaming adapters
-                                if name and dev.name:
-                                    n1 = normalize_name(name)
-                                    n2 = normalize_name(dev.name)
-                                    # Only enforce name check for personal roaming devices (laptops, phones, tablets, etc.)
-                                    roaming_keywords = ["laptop", "phone", "ipad", "iphone", "macbook", "workstation", "pc", "desktop", "tablet", "computer"]
-                                    is_roaming = any(k in n1 or k in n2 for k in roaming_keywords)
-                                    if is_roaming:
-                                        if len(n1) > 2 and len(n2) > 2 and n1 not in n2 and n2 not in n1:
-                                            continue
-                                return _finalize_device(dev)
+                        if dev and is_hardware_integration_device(dev):
+                            # Check name compatibility to prevent incorrect merges of roaming adapters
+                            if name and dev.name:
+                                n1 = normalize_name(name)
+                                n2 = normalize_name(dev.name)
+                                # Only enforce name check for personal roaming devices (laptops, phones, tablets, etc.)
+                                is_roaming = any(k in n1 or k in n2 for k in roaming_keywords)
+                                if is_roaming:
+                                    if len(n1) > 2 and len(n2) > 2 and n1 not in n2 and n2 not in n1:
+                                        continue
+                            return _finalize_device(dev)
 
     # 3. Search by IP address
     ip_to_search = ip if (ip and ip != "Unknown") else None
@@ -341,37 +425,29 @@ def find_correlated_device(hass: HomeAssistant, mac: str, ip: str, name: str):
                 entry = ent_reg.async_get(state.entity_id)
                 if entry and entry.device_id:
                     dev = dev_reg.async_get(entry.device_id)
-                    if dev:
-                        is_pure_snmp = dev.identifiers and all(ident[0] == "snmp_network_manager" or ident[0] == "snmp_switch_manager" for ident in dev.identifiers)
-                        if not is_pure_snmp:
-                            return _finalize_device(dev)
+                    if dev and is_hardware_integration_device(dev):
+                        return _finalize_device(dev)
 
     # 4. Search by normalized name match
     if name:
-        target_name = normalize_name(name)
-        if len(target_name) > 2:
-            for dev in dev_reg.devices:
-                if dev.name:
-                    dev_name_clean = normalize_name(dev.name)
-                    if dev_name_clean == target_name:
-                        is_pure_snmp = dev.identifiers and all(ident[0] == "snmp_network_manager" or ident[0] == "snmp_switch_manager" for ident in dev.identifiers)
-                        if not is_pure_snmp:
-                            return _finalize_device(dev)
+        matched_by_name = _find_by_name(name)
+        if matched_by_name:
+            return _finalize_device(matched_by_name)
                             
-            # 5. Dynamic heuristic: match normalized identifier value substring inside normalized SNMP name
-            for dev in dev_reg.devices:
-                is_pure_snmp = dev.identifiers and all(ident[0] == "snmp_network_manager" or ident[0] == "snmp_switch_manager" for ident in dev.identifiers)
-                if is_pure_snmp:
+        # 5. Dynamic heuristic: match normalized identifier value substring inside normalized SNMP name
+        target_name = normalize_name(name)
+        for dev in dev_reg.devices:
+            if not is_hardware_integration_device(dev):
+                continue
+            for ident in dev.identifiers:
+                domain_name = ident[0]
+                ident_val = str(ident[1])
+                if domain_name in ("snmp_network_manager", "snmp_switch_manager", "hacs"):
                     continue
-                for ident in dev.identifiers:
-                    domain_name = ident[0]
-                    ident_val = str(ident[1])
-                    if domain_name in ("snmp_network_manager", "snmp_switch_manager"):
-                        continue
-                    norm_ident = normalize_name(ident_val)
-                    # Require minimum length of 6 characters to prevent false matches on short integers/booleans
-                    if len(norm_ident) >= 6 and norm_ident in target_name:
-                        return _finalize_device(dev)
+                norm_ident = normalize_name(ident_val)
+                # Require minimum length of 6 characters to prevent false matches on short integers/booleans
+                if len(norm_ident) >= 6 and norm_ident in target_name:
+                    return _finalize_device(dev)
                             
     return None
 
@@ -411,15 +487,19 @@ def resolve_device_state(hass: HomeAssistant, matching_device, dev_entities, cur
     is_battery_powered = False
     for ent in dev_entities:
         ent_dc = getattr(ent, "device_class", None) or getattr(ent, "original_device_class", None)
-        if ent_dc == "battery" or "battery" in ent.entity_id.lower():
+        t_key = getattr(ent, "translation_key", None) or ""
+        if ent_dc == "battery" or t_key in ("battery", "battery_level") or "battery" in ent.entity_id.lower():
             is_battery_powered = True
             break
         ent_state = hass.states.get(ent.entity_id) if hass else None
         if ent_state:
+            attrs = ent_state.attributes
             if (
-                ent_state.attributes.get("device_class") == "battery"
-                or "battery" in ent_state.attributes
-                or "battery_level" in ent_state.attributes
+                attrs.get("device_class") == "battery"
+                or "battery" in attrs
+                or "battery_level" in attrs
+                or "battery_state" in attrs
+                or "battery_percentage" in attrs
             ):
                 is_battery_powered = True
                 break
@@ -437,8 +517,10 @@ def resolve_device_state(hass: HomeAssistant, matching_device, dev_entities, cur
         if ent_state:
             if ent_state.state not in ["unavailable", "unknown"]:
                 ha_available = True
-                if ent_state.state in ["off", "standby", "idle", "paused"]:
-                    is_standby = True
+                domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
+                if domain in ("media_player", "vacuum", "climate", "switch", "light"):
+                    if ent_state.state in ["off", "standby", "idle", "paused"]:
+                        is_standby = True
             if getattr(ent, "domain", None) == "device_tracker":
                 source_type = ent_state.attributes.get("source_type")
                 if ent_state.state == "home":

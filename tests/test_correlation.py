@@ -280,7 +280,54 @@ class TestCorrelation(unittest.TestCase):
         state = resolve_device_state(self.hass, dev, [plug_ent], "down")
         self.assertEqual(state, "up")
 
+    def test_correlation_waterguru_avoid_hacs(self):
+        # Dummy HACS repository device with exact name "WaterGuru"
+        hacs_dev = MockDevice("hacs_dev", "WaterGuru", identifiers={("hacs", "123456")})
+        # Real hardware device with manufacturer "WaterGuru" and name "WaterGuru Pool"
+        hw_dev = MockDevice(
+            "waterguru_pool",
+            "WaterGuru Pool",
+            identifiers={("waterguru", "pod_uuid_123")},
+            manufacturer="WaterGuru",
+            model="SENSE",
+        )
+        self.devices["hacs_dev"] = hacs_dev
+        self.devices["waterguru_pool"] = hw_dev
+
+        # Endpoint with name "WaterGuru" should ignore the HACS device and match the real pool hardware device
+        matched = find_correlated_device(self.hass, None, None, "WaterGuru")
+        self.assertIsNotNone(matched)
+        self.assertEqual(matched.id, "waterguru_pool")
+
+        # Battery entity on the hardware device
+        battery_ent = MockEntity("sensor.waterguru_pool_battery", "waterguru_pool", "waterguru", "u_bat", device_class="battery")
+        mock_state = MagicMock()
+        mock_state.state = "85"
+        mock_state.attributes = {"device_class": "battery", "battery_level": 85}
+        self.hass.states.get = lambda eid: mock_state
+
+        # When offline on SNMP, the battery device should resolve to "asleep"
+        state = resolve_device_state(self.hass, matched, [battery_ent], "down")
+        self.assertEqual(state, "asleep")
+
+    def test_correlation_lock_fuzzy_matching(self):
+        # Hardware lock device in HA named "Front Door"
+        lock_dev = MockDevice(
+            "front_door_lock",
+            "Front Door",
+            identifiers={("schlage", "schlage_uuid_123")},
+            manufacturer="Schlage",
+            model="be499WB2",
+        )
+        self.devices["front_door_lock"] = lock_dev
+
+        # Network node named "Front Door Lock" should match HA device "Front Door"
+        matched = find_correlated_device(self.hass, None, None, "Front Door Lock")
+        self.assertIsNotNone(matched)
+        self.assertEqual(matched.id, "front_door_lock")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

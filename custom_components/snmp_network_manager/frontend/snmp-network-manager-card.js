@@ -1,7 +1,7 @@
 class SnmpNetworkManagerCard extends HTMLElement {
   constructor() {
     super();
-    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.0", "color: #ff9800; font-weight: bold;", "color: default;");
+    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.1", "color: #ff9800; font-weight: bold;", "color: default;");
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
@@ -1661,9 +1661,14 @@ class SnmpNetworkManagerCard extends HTMLElement {
   _updateToolbar() {
     const saveBtn = this.shadowRoot.getElementById('btn-save');
     const cancelBtn = this.shadowRoot.getElementById('btn-cancel');
+    const deleteBtn = this.shadowRoot.getElementById('btn-delete');
     
     if (saveBtn) saveBtn.disabled = !this._hasMovedNodes;
-    if (cancelBtn) cancelBtn.style.display = this._hasMovedNodes ? 'inline-block' : 'none';
+    if (cancelBtn) cancelBtn.style.display = (this._cardView === 'map' && this._hasMovedNodes) ? 'inline-block' : 'none';
+    if (deleteBtn) {
+      const isCustom = !['clustered', 'concentric', 'force', 'grid'].includes(this._layoutMode);
+      deleteBtn.style.display = (this._cardView === 'map' && isCustom) ? 'inline-block' : 'none';
+    }
   }
 
   async _saveLayoutToApi() {
@@ -2408,7 +2413,16 @@ class SnmpNetworkManagerCard extends HTMLElement {
     // Show/hide layout buttons
     const layoutControls = this.shadowRoot.querySelectorAll('.layout-control');
     if (layoutControls) {
-      layoutControls.forEach(el => el.style.display = this._cardView === 'map' ? 'inline-block' : 'none');
+      layoutControls.forEach(el => {
+        if (el.id === 'btn-cancel') {
+          el.style.display = (this._cardView === 'map' && this._hasMovedNodes) ? 'inline-block' : 'none';
+        } else if (el.id === 'btn-delete') {
+          const isCustom = !['clustered', 'concentric', 'force', 'grid'].includes(this._layoutMode);
+          el.style.display = (this._cardView === 'map' && isCustom) ? 'inline-block' : 'none';
+        } else {
+          el.style.display = this._cardView === 'map' ? 'inline-block' : 'none';
+        }
+      });
     }
 
     if (this._cardView === 'list') {
