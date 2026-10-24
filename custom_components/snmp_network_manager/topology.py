@@ -145,14 +145,34 @@ def get_composite_devices(dev_reg, dev) -> list:
     if not dev:
         return []
     comp_id = getattr(dev, "composite_device_id", None)
-    if not comp_id:
-        return [dev]
-    if hasattr(dev_reg, "async_get_devices_for_composite_device_id"):
-        comp_devices = dev_reg.async_get_devices_for_composite_device_id(comp_id)
-        if comp_devices:
-            return list(comp_devices)
-    devices = dev_reg.devices.values() if hasattr(dev_reg.devices, "values") else dev_reg.devices
-    return [d for d in devices if getattr(d, "composite_device_id", None) == comp_id or d.id == comp_id]
+    devices = list(dev_reg.devices)
+    if comp_id:
+        if hasattr(dev_reg, "async_get_devices_for_composite_device_id"):
+            comp_devices = dev_reg.async_get_devices_for_composite_device_id(comp_id)
+            if comp_devices:
+                matched = list(comp_devices)
+            else:
+                matched = [d for d in devices if getattr(d, "composite_device_id", None) == comp_id or d.id == comp_id]
+        else:
+            matched = [d for d in devices if getattr(d, "composite_device_id", None) == comp_id or d.id == comp_id]
+    else:
+        matched = [dev]
+        for d in devices:
+            if d.id != dev.id and getattr(d, "composite_device_id", None) == dev.id:
+                matched.append(d)
+
+    # Also include devices that share the exact same normalized name for roaming devices (e.g. UniFi tracker device + mobile_app device)
+    dev_n = normalize_name(getattr(dev, "name_by_user", None) or dev.name or "")
+    roaming_keywords = ("laptop", "phone", "ipad", "iphone", "macbook", "workstation", "pc", "desktop", "tablet", "computer", "watch")
+    if dev_n and any(k in dev_n for k in roaming_keywords):
+        seen_ids = {d.id for d in matched}
+        for d in devices:
+            if d.id not in seen_ids:
+                d_n = normalize_name(getattr(d, "name_by_user", None) or d.name or "")
+                if d_n == dev_n:
+                    matched.append(d)
+                    seen_ids.add(d.id)
+    return matched
 
 
 def get_primary_device(dev_reg, ent_reg, dev):
@@ -505,56 +525,71 @@ def resolve_device_state(hass: HomeAssistant, matching_device, dev_entities, cur
                 break
 
     ha_available = False
-    has_home_tracker = False
-    has_gps_away_tracker = False
+    has_network_home_tracker = False
     has_network_away_tracker = False
+    has_gps_away_tracker = False
+    wifi_connected = False
+    wifi_disconnected = False
+    is_on_cellular = False
     is_standby = False
 
     for ent in dev_entities:
         if getattr(ent, "platform", None) == "snmp_network_manager":
             continue
         ent_state = hass.states.get(ent.entity_id) if hass else None
-        if ent_state:
-            if ent_state.state not in ["unavailable", "unknown"]:
-                ha_available = True
-                domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
-                if domain in ("media_player", "vacuum", "climate", "switch", "light"):
-                    if ent_state.state in ["off", "standby", "idle", "paused"]:
-                        is_standby = True
-            if getattr(ent, "domain", None) == "device_tracker":
-                source_type = ent_state.attributes.get("source_type")
-                if ent_state.state == "home":
-                    has_home_tracker = True
-                elif ent_state.state in ["not_home", "away"]:
-                    if source_type == "gps":
-                        has_gps_away_tracker = True
-                    else:
-                        has_network_away_tracker = True
+        if not ent_state:
+            continue
+
+        st = ent_state.state
+        if st not in ["unavailable", "unknown"]:
+            ha_available = True
+            domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
+            if domain in ("media_player", "vacuum", "climate", "switch", "light"):
+                if st in ["off", "standby", "idle", "paused"]:
+                    is_standby = True
+
+        domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
+        ent_id_lower = ent.entity_id.lower()
+
+        # 1. Device Trackers
+        if domain == "device_tracker":
+            source_type = ent_state.attributes.get("source_type")
+            if source_type == "gps":
+                if st in ["not_home", "away"]:
+                    has_gps_away_tracker = True
+            else:
+                # Router / Network / Bluetooth tracker (e.g. UniFi, SNMP, router, bluetooth)
+                if st == "home":
+                    has_network_home_tracker = True
+                elif st in ["not_home", "away"]:
+                    has_network_away_tracker = True
+
+        # 2. Mobile App Wi-Fi and Cellular Connection Sensors
+        if "wi_fi_connection" in ent_id_lower or ent_id_lower.endswith("_ssid") or "wifi_connection" in ent_id_lower:
+            val = st.strip().lower() if st else ""
+            if val and val not in ("<not connected>", "not connected", "disconnected", "unavailable", "unknown", "none", "off"):
+                wifi_connected = True
+            elif val in ("<not connected>", "not connected", "disconnected"):
+                wifi_disconnected = True
+        elif "network_type" in ent_id_lower:
+            val = st.strip().lower() if st else ""
+            if val == "cellular":
+                is_on_cellular = True
+            elif val == "wifi":
+                wifi_connected = True
+        elif "wi_fi_state" in ent_id_lower or "wifi_state" in ent_id_lower or "on_home_wi_fi" in ent_id_lower:
+            if st == "off":
+                wifi_disconnected = True
+            elif st == "on":
+                wifi_connected = True
 
     # State transitions based on Home Assistant tracked state and SNMP status
-    if current_snmp_state == "up" or has_home_tracker:
-        return "up"
-    elif is_portable:
-        if has_gps_away_tracker:
-            return "away"
-        elif is_mobile_phone and not is_laptop_tablet:
-            # For a pure mobile phone/watch, a network tracker showing not_home or being offline on SNMP is enough to mark it Away
-            if has_network_away_tracker or (not has_home_tracker and current_snmp_state != "up"):
-                return "away"
-            elif ha_available:
-                return "asleep"
-            else:
-                return "down"
-        else:
-            # Laptops/tablets: if HA tracks them as available/reporting, they are Asleep; otherwise Offline (down)
-            if ha_available:
-                return "asleep"
-            else:
-                return "down"
-    else:
-        # Stationary devices:
+    if not is_portable:
+        # Stationary devices (switches, plugs, TVs, smart locks, pool sensors, etc.):
         # When ha_available is True: battery-powered devices and devices in standby (off/idle) are Asleep; active devices are Up.
         # When ha_available is False: Home Assistant cannot communicate with the device, so it is Offline (down).
+        if current_snmp_state == "up" or has_network_home_tracker:
+            return "up"
         if ha_available:
             if is_battery_powered or is_standby:
                 return "asleep"
@@ -562,6 +597,39 @@ def resolve_device_state(hass: HomeAssistant, matching_device, dev_entities, cur
                 return "up"
         else:
             return "down"
+
+    # Portable devices (laptops, tablets, mobile phones, watches)
+    # Determine local network connection presence
+    has_local_connection = (
+        (current_snmp_state == "up" or has_network_home_tracker or wifi_connected)
+        and not wifi_disconnected
+        and not is_on_cellular
+        and not has_network_away_tracker
+    )
+
+    if is_mobile_phone and not is_laptop_tablet:
+        # Pure mobile phones / watches:
+        if has_local_connection:
+            return "up"
+        # If explicitly away from home geofence, or disconnected from Wi-Fi / on cellular / network tracker away
+        if has_gps_away_tracker or is_on_cellular or wifi_disconnected or has_network_away_tracker:
+            return "away" if ha_available else "down"
+        # If not seen on local SNMP and no network/wifi presence
+        if current_snmp_state != "up" and not has_network_home_tracker and not wifi_connected:
+            return "away" if ha_available else "down"
+        # Fallback if HA reports available via GPS home but no local network activity
+        if ha_available:
+            return "away"
+        return "down"
+    else:
+        # Laptops / tablets:
+        if has_local_connection:
+            return "up"
+        if has_gps_away_tracker or has_network_away_tracker:
+            return "away" if ha_available else "down"
+        if ha_available:
+            return "asleep"
+        return "down"
 
 def read_local_arp() -> dict:
     """Read host ARP cache from /proc/net/arp as fallback."""
@@ -690,7 +758,10 @@ class TopologyEngine:
                         known_macs.add(conn_val.upper())
         
         # Fallback MAC-to-IP from host's ARP table /proc/net/arp
-        mac_to_ip = read_local_arp()
+        if self.hass:
+            mac_to_ip = await self.hass.async_add_executor_job(read_local_arp)
+        else:
+            mac_to_ip = read_local_arp()
         mac_to_name = {}
         active_macs = set()
         

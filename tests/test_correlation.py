@@ -24,6 +24,9 @@ class MockHomeAssistant:
     def is_running(self) -> bool:
         return True
 
+    async def async_add_executor_job(self, target, *args):
+        return target(*args)
+
 class MockStore:
     def __init__(self, *args, **kwargs):
         pass
@@ -326,8 +329,115 @@ class TestCorrelation(unittest.TestCase):
         self.assertIsNotNone(matched)
         self.assertEqual(matched.id, "front_door_lock")
 
+    def test_mobile_phone_online_on_wifi(self):
+        # Mobile phone connected to Wi-Fi
+        phone_dev = MockDevice("dev_phone", "Jamie's Phone", model="Pixel 10 Pro XL")
+        gps_tracker = MockEntity("device_tracker.jamie_s_phone", "dev_phone", "mobile_app", "u_gps")
+        wifi_sensor = MockEntity("sensor.jamie_s_phone_wi_fi_connection", "dev_phone", "mobile_app", "u_wifi")
+
+        def mock_get(eid):
+            m = MagicMock()
+            if eid == "device_tracker.jamie_s_phone":
+                m.state = "home"
+                m.attributes = {"source_type": "gps"}
+            elif eid == "sensor.jamie_s_phone_wi_fi_connection":
+                m.state = "otispresley.com"
+                m.attributes = {}
+            return m
+
+        self.hass.states.get = mock_get
+        state = resolve_device_state(self.hass, phone_dev, [gps_tracker, wifi_sensor], "up")
+        self.assertEqual(state, "up")
+
+    def test_mobile_phone_away_when_wifi_off_on_cellular_at_home(self):
+        # Phone at home via GPS, but Wi-Fi turned off (<not connected>) and on cellular
+        phone_dev = MockDevice("dev_phone", "Jamie's Phone", model="Pixel 10 Pro XL")
+        gps_tracker = MockEntity("device_tracker.jamie_s_phone", "dev_phone", "mobile_app", "u_gps")
+        wifi_sensor = MockEntity("sensor.jamie_s_phone_wi_fi_connection", "dev_phone", "mobile_app", "u_wifi")
+        net_sensor = MockEntity("sensor.jamie_s_phone_network_type", "dev_phone", "mobile_app", "u_net")
+
+        def mock_get(eid):
+            m = MagicMock()
+            if eid == "device_tracker.jamie_s_phone":
+                m.state = "home"
+                m.attributes = {"source_type": "gps"}
+            elif eid == "sensor.jamie_s_phone_wi_fi_connection":
+                m.state = "<not connected>"
+                m.attributes = {}
+            elif eid == "sensor.jamie_s_phone_network_type":
+                m.state = "cellular"
+                m.attributes = {}
+            return m
+
+        self.hass.states.get = mock_get
+        # Even if SNMP cache is down or up, phone reports disconnected Wi-Fi / cellular -> away
+        state = resolve_device_state(self.hass, phone_dev, [gps_tracker, wifi_sensor, net_sensor], "down")
+        self.assertEqual(state, "away")
+
+    def test_mobile_phone_away_via_router_tracker(self):
+        # Phone at home via GPS, but UniFi router tracker shows not_home
+        phone_dev = MockDevice("dev_phone", "Jamie's Phone", model="Pixel 10 Pro XL")
+        gps_tracker = MockEntity("device_tracker.jamie_s_phone", "dev_phone", "mobile_app", "u_gps")
+        unifi_tracker = MockEntity("device_tracker.pixel_10_pro_xl_2", "dev_phone", "unifi", "u_unifi")
+
+        def mock_get(eid):
+            m = MagicMock()
+            if eid == "device_tracker.jamie_s_phone":
+                m.state = "home"
+                m.attributes = {"source_type": "gps"}
+            elif eid == "device_tracker.pixel_10_pro_xl_2":
+                m.state = "not_home"
+                m.attributes = {"source_type": "router"}
+            return m
+
+        self.hass.states.get = mock_get
+        state = resolve_device_state(self.hass, phone_dev, [gps_tracker, unifi_tracker], "down")
+        self.assertEqual(state, "away")
+
+    def test_mobile_phone_away_via_gps(self):
+        # Phone physically away from home (GPS not_home)
+        phone_dev = MockDevice("dev_phone", "Jamie's Phone", model="Pixel 10 Pro XL")
+        gps_tracker = MockEntity("device_tracker.jamie_s_phone", "dev_phone", "mobile_app", "u_gps")
+
+        def mock_get(eid):
+            m = MagicMock()
+            if eid == "device_tracker.jamie_s_phone":
+                m.state = "not_home"
+                m.attributes = {"source_type": "gps"}
+            return m
+
+        self.hass.states.get = mock_get
+        state = resolve_device_state(self.hass, phone_dev, [gps_tracker], "down")
+        self.assertEqual(state, "away")
+
+    def test_mobile_phone_down_when_unavailable(self):
+        # Phone completely unavailable (powered off / dead battery)
+        phone_dev = MockDevice("dev_phone", "Jamie's Phone", model="Pixel 10 Pro XL")
+        gps_tracker = MockEntity("device_tracker.jamie_s_phone", "dev_phone", "mobile_app", "u_gps")
+
+        def mock_get(eid):
+            m = MagicMock()
+            m.state = "unavailable"
+            m.attributes = {"source_type": "gps"}
+            return m
+
+        self.hass.states.get = mock_get
+        state = resolve_device_state(self.hass, phone_dev, [gps_tracker], "down")
+        self.assertEqual(state, "down")
+
+    def test_read_local_arp_executor(self):
+        import asyncio
+        from unittest.mock import patch, mock_open
+        from custom_components.snmp_network_manager.topology import read_local_arp
+
+        sample_arp = "IP address HW type Flags HW address Mask Device\n10.0.12.50 0x1 0x2 AA:BB:CC:DD:EE:FF * eth0\n"
+        with patch("builtins.open", mock_open(read_data=sample_arp)):
+            arp = asyncio.run(self.hass.async_add_executor_job(read_local_arp))
+            self.assertEqual(arp.get("AA:BB:CC:DD:EE:FF"), "10.0.12.50")
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

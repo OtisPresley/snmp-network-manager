@@ -1,7 +1,7 @@
 class SnmpNetworkManagerCard extends HTMLElement {
   constructor() {
     super();
-    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.1", "color: #ff9800; font-weight: bold;", "color: default;");
+    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.2", "color: #ff9800; font-weight: bold;", "color: default;");
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
@@ -207,28 +207,13 @@ class SnmpNetworkManagerCard extends HTMLElement {
           topologyNeedsRefetch = true;
         }
 
+        // Detect if state changed on the linked entity
+        if (oldState && newState.state !== oldState.state) {
+          topologyNeedsRefetch = true;
+        }
+
         const nodeEl = this._domCache.nodes[id];
         if (nodeEl) {
-          // Update live state class only for device_tracker entities
-          let liveState = node.attrs?.state || 'up';
-          if (entId.startsWith('device_tracker.')) {
-            if (liveState !== 'asleep') {
-              if (newState.state === 'not_home' || newState.state === 'away') {
-                liveState = 'away';
-              } else if (newState.state === 'unavailable') {
-                liveState = 'down';
-              } else if (newState.state === 'home') {
-                liveState = 'up';
-              }
-            } else if (newState.state === 'home') {
-              liveState = 'up';
-            }
-          }
-          nodeEl.classList.remove('down', 'asleep', 'away');
-          if (liveState !== 'up') {
-            nodeEl.classList.add(liveState);
-          }
-          
           // Update display name if friendly_name changed and node is not an infrastructure device and current name is MAC/IP
           if (node.kind !== 'device') {
             const currentName = node.attrs?.name || '';
@@ -249,8 +234,15 @@ class SnmpNetworkManagerCard extends HTMLElement {
         }
       });
 
-      if (topologyNeedsRefetch && !this._fetching && !this._hasMovedNodes) {
-        this._fetchGraphData();
+      if (topologyNeedsRefetch && !this._hasMovedNodes) {
+        if (this._refetchDebounceTimer) {
+          clearTimeout(this._refetchDebounceTimer);
+        }
+        this._refetchDebounceTimer = setTimeout(() => {
+          if (!this._fetching) {
+            this._fetchGraphData();
+          }
+        }, 300);
       }
     }
 
@@ -3076,20 +3068,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
       const name = node.attrs?.name || id.split(':').pop();
       const ip = node.attrs?.ip ? ` (${node.attrs.ip})` : '';
       const entity = node.attrs?.entity_id ? this._hass.states[node.attrs.entity_id] : null;
-      let currentState = node.attrs?.state || 'up';
-      if (entity && node.attrs?.entity_id?.startsWith('device_tracker.')) {
-        if (currentState !== 'asleep') {
-          if (entity.state === 'not_home' || entity.state === 'away') {
-            currentState = 'away';
-          } else if (entity.state === 'unavailable') {
-            currentState = 'down';
-          } else if (entity.state === 'home') {
-            currentState = 'up';
-          }
-        } else if (entity.state === 'home') {
-          currentState = 'up';
-        }
-      }
+      const currentState = node.attrs?.state || 'up';
       const isDown = currentState === 'down';
       const isAsleep = currentState === 'asleep';
       const isAway = currentState === 'away';
