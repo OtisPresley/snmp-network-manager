@@ -1,7 +1,17 @@
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 class SnmpNetworkManagerCard extends HTMLElement {
   constructor() {
     super();
-    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.2", "color: #ff9800; font-weight: bold;", "color: default;");
+    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.3", "color: #ff9800; font-weight: bold;", "color: default;");
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
@@ -1424,7 +1434,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
     const customSpan = this.shadowRoot.getElementById('custom-buttons');
     if (customSpan) {
       customSpan.innerHTML = customLayoutNames.map(m => `
-        <button class="btn-custom ${this._layoutMode === m ? 'active' : ''}" data-mode="${m}">${m}</button>
+        <button class="btn-custom ${this._layoutMode === m ? 'active' : ''}" data-mode="${escapeHtml(m)}">${escapeHtml(m)}</button>
       `).join('');
       
       this.shadowRoot.querySelectorAll('.btn-custom').forEach(btn => {
@@ -2019,8 +2029,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
             const title = integration.title || domain;
             return `
               <div style="display: inline-flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 4px 8px; border-radius: 12px; font-size: 0.8rem; line-height: 1;">
-                <img src="https://brands.home-assistant.io/_/${domain}/icon.png" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.style.display='none';" />
-                <span>${title}</span>
+                <img src="https://brands.home-assistant.io/_/${encodeURIComponent(domain)}/icon.png" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.style.display='none';" />
+                <span>${escapeHtml(title)}</span>
               </div>
             `;
           }).join('')}
@@ -2102,19 +2112,19 @@ class SnmpNetworkManagerCard extends HTMLElement {
       </style>
       <div class="details-container">
         <div class="details-header">
-          <div class="details-title">${name}</div>
-          <span class="details-badge ${stateClass}">${stateLabel}</span>
+          <div class="details-title">${escapeHtml(name)}</div>
+          <span class="details-badge ${stateClass}">${escapeHtml(stateLabel)}</span>
         </div>
         <table class="details-table">
           <tr>
             <td class="label-col">MAC Address</td>
-            <td><code>${mac}</code></td>
+            <td><code>${escapeHtml(mac)}</code></td>
           </tr>
           <tr>
             <td class="label-col">IP Address</td>
             <td>
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <span>${ip}</span>
+                <span>${escapeHtml(ip)}</span>
                 ${ip !== 'Unknown' ? `<button id="btn-ping" style="background: var(--primary-color); color: var(--text-primary-color); border: none; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; cursor: pointer;">Ping</button>` : ''}
               </div>
               <div id="ping-result" style="font-size: 0.8rem; color: var(--secondary-text-color); margin-top: 4px; display: none;"></div>
@@ -2122,11 +2132,11 @@ class SnmpNetworkManagerCard extends HTMLElement {
           </tr>
           <tr>
             <td class="label-col">Device Type</td>
-            <td>${kind}</td>
+            <td>${escapeHtml(kind)}</td>
           </tr>
           <tr>
             <td class="label-col">Connection Port</td>
-            <td>${parentName} - ${portName}</td>
+            <td>${escapeHtml(parentName)} - ${escapeHtml(portName)}</td>
           </tr>
           <tr>
             <td class="label-col">Linked Integrations</td>
@@ -2134,11 +2144,11 @@ class SnmpNetworkManagerCard extends HTMLElement {
           </tr>
           <tr>
             <td class="label-col">Current Duration</td>
-            <td><strong>${durationStr}</strong> (Since ${history.length > 0 ? formatTime(history[history.length - 1].timestamp) : 'unknown'})</td>
+            <td><strong>${escapeHtml(durationStr)}</strong> (Since ${history.length > 0 ? escapeHtml(formatTime(history[history.length - 1].timestamp)) : 'unknown'})</td>
           </tr>
           <tr>
             <td class="label-col">Last Seen</td>
-            <td>${lastSeenStr}</td>
+            <td>${escapeHtml(lastSeenStr)}</td>
           </tr>
         </table>
         ${historyHtml}
@@ -2175,7 +2185,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
                   const dName = d.name_by_user || d.name || d.id;
                   const info = [d.manufacturer, d.model].filter(Boolean).join(' ');
                   const label = info ? `${dName} (${info})` : dName;
-                  return `<option value="${d.id}" ${d.id === deviceId ? 'selected' : ''}>${label}</option>`;
+                  return `<option value="${escapeHtml(d.id)}" ${d.id === deviceId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
                 }).join('')}
             </select>
             <button id="btn-save-link" style="background: var(--primary-color); color: var(--text-primary-color); border: none; border-radius: 4px; padding: 6px 12px; font-size: 0.8rem; cursor: pointer; font-weight: 500;">Save</button>
@@ -2267,10 +2277,10 @@ class SnmpNetworkManagerCard extends HTMLElement {
           } else if (latency === 'Failed') {
             pingRes.innerHTML = '<span style="color: var(--error-color, #ff5252);">Ping Execution Failed</span>';
           } else {
-            pingRes.innerHTML = `Ping Success: <strong style="color: #00e676;">${latency}</strong>`;
+            pingRes.innerHTML = `Ping Success: <strong style="color: #00e676;">${escapeHtml(latency)}</strong>`;
           }
         } catch (e) {
-          pingRes.innerHTML = `<span style="color: var(--error-color, #ff5252);">Error: ${e.message}</span>`;
+          pingRes.innerHTML = `<span style="color: var(--error-color, #ff5252);">Error: ${escapeHtml(e.message)}</span>`;
         } finally {
           pingBtn.disabled = false;
         }
@@ -2614,15 +2624,15 @@ class SnmpNetworkManagerCard extends HTMLElement {
                   ? `<ha-icon icon="mdi:link-off" title="Unlinked from Home Assistant Device" style="--mdc-icon-size: 14px; color: var(--error-color, #ff5252); margin-left: 4px; opacity: 0.8; vertical-align: middle;"></ha-icon>`
                   : '';
                 return `
-                  <tr class="device-row" data-id="${item.id}">
+                  <tr class="device-row" data-id="${escapeHtml(item.id)}">
                     <td class="device-name">
                       <ha-icon icon="${item.icon}" class="device-icon ${item.isDown ? 'down' : (item.isAsleep ? 'asleep' : (item.isAway ? 'away' : ''))}"></ha-icon>
-                      <span>${item.name}</span>${unlinkedHtml}
+                      <span>${escapeHtml(item.name)}</span>${unlinkedHtml}
                     </td>
-                    <td>${item.type}</td>
-                    <td><code>${item.mac}</code></td>
-                    <td>${item.ip}</td>
-                    <td>${item.parentName} - ${item.portName}</td>
+                    <td>${escapeHtml(item.type)}</td>
+                    <td><code>${escapeHtml(item.mac)}</code></td>
+                    <td>${escapeHtml(item.ip)}</td>
+                    <td>${escapeHtml(item.parentName)} - ${escapeHtml(item.portName)}</td>
                     <td>
                       <span class="state-badge ${item.isDown ? 'offline' : (item.isAsleep ? 'asleep' : (item.isAway ? 'away' : 'online'))}">
                         ${item.isDown ? 'Offline' : (item.isAsleep ? 'Asleep' : (item.isAway ? 'Away' : 'Online'))}
@@ -2914,10 +2924,10 @@ class SnmpNetworkManagerCard extends HTMLElement {
             }
             
             return `
-              <div class="switch-group" data-id="${parentId}">
+              <div class="switch-group" data-id="${escapeHtml(parentId)}">
                 <div class="switch-header">
                   <ha-icon icon="${icon}" class="switch-icon"></ha-icon>
-                  <span>${parentNode.attrs?.name || parentId}</span>
+                  <span>${escapeHtml(parentNode.attrs?.name || parentId)}</span>
                   <span style="font-size: 0.8rem; font-weight: normal; color: var(--secondary-text-color); margin-left: 8px;">
                     (${children.length} connected)
                   </span>
@@ -2946,11 +2956,11 @@ class SnmpNetworkManagerCard extends HTMLElement {
                         ? `<ha-icon icon="mdi:link-off" title="Unlinked from Home Assistant Device" style="--mdc-icon-size: 13px; color: var(--error-color, #ff5252); margin-left: 4px; opacity: 0.8; vertical-align: middle;"></ha-icon>`
                         : '';
                       return `
-                        <div class="port-card" data-id="${item.id}">
+                        <div class="port-card" data-id="${escapeHtml(item.id)}">
                           <div class="port-info">
-                            <span class="port-num">${item.port}</span>
-                            <span class="dev-name">${name}${unlinkedHtml}</span>
-                            <span class="dev-ip">${ip}</span>
+                            <span class="port-num">${escapeHtml(item.port)}</span>
+                            <span class="dev-name">${escapeHtml(name)}${unlinkedHtml}</span>
+                            <span class="dev-ip">${escapeHtml(ip)}</span>
                           </div>
                           <ha-icon icon="${childIcon}" style="color: ${iconColor};" class="device-icon ${state === 'down' ? 'down' : (state === 'asleep' ? 'asleep' : (state === 'away' ? 'away' : ''))}"></ha-icon>
                         </div>
@@ -3056,8 +3066,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
       const hoverId = `edge-hover-${edge.src.replace(/:/g, '_')}-${edge.dst.replace(/:/g, '_')}`;
       
       return `
-        <line class="edge-hover" id="${hoverId}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}" stroke="rgba(0,0,0,0.01)" stroke-width="15" style="cursor: pointer; pointer-events: stroke;"><title>${title}</title></line>
-        <line class="edge ${edge.kind}${speedClass}" id="${edgeId}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}"><title>${title}</title></line>
+        <line class="edge-hover" id="${hoverId}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}" stroke="rgba(0,0,0,0.01)" stroke-width="15" style="cursor: pointer; pointer-events: stroke;"><title>${escapeHtml(title)}</title></line>
+        <line class="edge ${edge.kind}${speedClass}" id="${edgeId}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}"><title>${escapeHtml(title)}</title></line>
       `;
     }).join('');
 
@@ -3135,24 +3145,24 @@ class SnmpNetworkManagerCard extends HTMLElement {
       const nodeKey = `node-${id.replace(/:/g, '_')}`;
       if (node.kind === 'device') {
         return `
-          <g class="node ${specificKind} ${stateClass} ${unlinkedClass}" id="${nodeKey}" transform="translate(${node.x},${node.y})" data-id="${id}">
-            <title>${hoverText}${clientCountStr}</title>
+          <g class="node ${specificKind} ${stateClass} ${unlinkedClass}" id="${nodeKey}" transform="translate(${node.x},${node.y})" data-id="${escapeHtml(id)}">
+            <title>${escapeHtml(hoverText)}${escapeHtml(clientCountStr)}</title>
             <circle r="${radius}"></circle>
             <foreignObject x="-${radius * 0.8}" y="-${radius * 0.8}" width="${radius * 1.6}" height="${radius * 1.6}">
               ${isImage ? 
-                `<img src="${icon}" style="width: 100%; height: 100%; border-radius: 50%;" />` :
+                `<img src="${encodeURI(icon)}" style="width: 100%; height: 100%; border-radius: 50%;" />` :
                 `<ha-icon icon="${icon}" style="--mdc-icon-size: ${radius * 1.6}px; display: flex; align-items: center; justify-content: center;"></ha-icon>`
               }
             </foreignObject>
-            ${showText ? `<text dx="${radius + 5}" dy="4">${displayName}${clientCountStr}</text>` : ''}
+            ${showText ? `<text dx="${radius + 5}" dy="4">${escapeHtml(displayName)}${escapeHtml(clientCountStr)}</text>` : ''}
           </g>
         `;
       } else {
         return `
-          <g class="node endpoint ${stateClass} ${unlinkedClass}" id="${nodeKey}" transform="translate(${node.x},${node.y})" data-id="${id}">
-            <title>${hoverText}</title>
+          <g class="node endpoint ${stateClass} ${unlinkedClass}" id="${nodeKey}" transform="translate(${node.x},${node.y})" data-id="${escapeHtml(id)}">
+            <title>${escapeHtml(hoverText)}</title>
             <circle r="${radius}"></circle>
-            ${showText ? `<text dx="${radius + 5}" dy="4">${displayName}</text>` : ''}
+            ${showText ? `<text dx="${radius + 5}" dy="4">${escapeHtml(displayName)}</text>` : ''}
           </g>
         `;
       }
@@ -3426,7 +3436,7 @@ class SnmpNetworkManagerCardEditor extends HTMLElement {
       <option value="force" ${this._config.layout_mode === 'force' ? 'selected' : ''}>Force</option>
       <option value="grid" ${this._config.layout_mode === 'grid' ? 'selected' : ''}>Grid</option>
       ${Object.keys(this._config.layouts || {}).map(m => `
-        <option value="${m}" ${this._config.layout_mode === m ? 'selected' : ''}>${m}</option>
+        <option value="${escapeHtml(m)}" ${this._config.layout_mode === m ? 'selected' : ''}>${escapeHtml(m)}</option>
       `).join('')}
     `;
 
@@ -3458,8 +3468,8 @@ class SnmpNetworkManagerCardEditor extends HTMLElement {
     const iconList = root.getElementById('icon-list');
     iconList.innerHTML = Object.entries(this._config.custom_icons || {}).map(([key, val]) => `
       <div class="layout-item">
-        <span><b>${key}</b>: ${val}</span>
-        <button data-key="${key}" class="btn-delete-icon">Delete</button>
+        <span><b>${escapeHtml(key)}</b>: ${escapeHtml(val)}</span>
+        <button data-key="${escapeHtml(key)}" class="btn-delete-icon">Delete</button>
       </div>
     `).join('') || 'No custom icons set.';
 

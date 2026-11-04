@@ -52,6 +52,7 @@ ha_core.HomeAssistant = MockHomeAssistant
 ha_components = types.ModuleType("homeassistant.components")
 ha_components_ws = types.ModuleType("homeassistant.components.websocket_api")
 ha_components_ws.websocket_command = lambda schema: lambda f: f
+ha_components_ws.require_admin = lambda f: f
 ha_components_ws.async_response = lambda f: f
 ha_components_ws.ActiveConnection = MagicMock
 

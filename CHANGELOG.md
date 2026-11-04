@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-11-04
+
+### Fixed
+- 🛡️ **Shared Device Registry Protection**: 
+  - Restricted device registry removals and detachment in `topology.py` (`async_sync_device_registry` and `enrich_topology`) to devices solely owned by this integration. Shared devices belonging to other integrations (UniFi, router, mobile app, etc.) are now safely detached using `remove_config_entry_id` without deleting the device or wiping external entities.
+  - Restricted manual link and unlink operations in `__init__.py` (`websocket_link_device`) to only move entities created by this integration (`platform == DOMAIN`), leaving other integrations' entities, names, identifiers, and connections intact.
+  - Prevented overwriting device registry `name` attributes for shared devices in `device_tracker.py` during entity setup and state updates.
+- 🎯 **Scoped Entity Cleanup**: Filtered legacy topology sensor registry cleanups in `sensor.py` strictly by `platform == DOMAIN` and the current `config_entry_id`.
+- 🔒 **WebSocket Security & Command Validation**:
+  - Enforced `@websocket_api.require_admin` on `snmp_network_manager/exclude_device`, `snmp_network_manager/link_device`, and `snmp_network_manager/ping_device`.
+  - Added strict IP validation via `ipaddress.ip_address()` in both `websocket_ping_device` and `async_ping` to prevent injection of malicious arguments or options into the ping command.
+- 🔤 **Frontend XSS Prevention & HTML Escaping**: Added HTML escaping across `snmp-network-manager-card.js` for all network-discovered and user-supplied strings, including node names, hostnames, IP addresses, MAC addresses, port names, switch names, integration titles, and SVG map/list/grouped view tooltips and labels.
+
+---
+
 ## [0.1.2] - 2026-10-24
 
 ### Fixed

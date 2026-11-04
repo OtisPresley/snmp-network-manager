@@ -61,11 +61,10 @@ SNMP Network Manager discovers, correlates, and visualizes your physical and wir
 ### HACS (Recommended)
 
 1. Open your Home Assistant instance and navigate to **HACS → Integrations**.
-2. Click the three dots in the top-right corner, select **Custom Repositories**, and add:
-   `https://github.com/OtisPresley/snmp-network-manager` (Category: **Integration**).
-3. Search for **SNMP Network Manager** and click **Download**.
-4. **Restart Home Assistant**.
-5. Go to **Settings → Devices & Services → Add Integration** and search for **SNMP Network Manager**.
+2. Search for **SNMP Network Manager** and click **Download**.
+   *(Note: If not yet available in the default store, click the three dots in the top-right corner, select **Custom Repositories**, and add `https://github.com/OtisPresley/snmp-network-manager` as an **Integration**).*
+3. **Restart Home Assistant**.
+4. Go to **Settings → Devices & Services → Add Integration** and search for **SNMP Network Manager**.
 
 ---
 

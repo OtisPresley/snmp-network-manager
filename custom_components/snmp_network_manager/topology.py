@@ -9,6 +9,8 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 
+from .const import DOMAIN
+
 _LOGGER = logging.getLogger(__name__)
 
 # OIDs
@@ -1856,7 +1858,6 @@ class TopologyEngine:
                                 
             # Disassociate stale connection on incompatible devices to prevent automatic HA registry merge
             if mac and name:
-                normalized_mac = mac.replace(":", "").replace("-", "").upper()
                 old_device = get_device_by_mac(dev_reg, mac)
                 
                 if old_device and old_device.name and (not matching_device or matching_device.id != old_device.id):
@@ -1868,16 +1869,31 @@ class TopologyEngine:
                     if is_roaming and self.entry_id in get_device_config_entry_ids(old_device):
                         if len(n1) > 2 and len(n2) > 2 and n1 not in n2 and n2 not in n1:
                             _LOGGER.info(
-                                "Disassociating stale connection/identifier for MAC %s from incompatible device %s (%s)",
+                                "Disassociating stale connection for MAC %s from incompatible device %s (%s)",
                                 mac, old_device.name, old_device.id
                             )
-                            new_connections = {c for c in old_device.connections if c[1].replace(":", "").replace("-", "").upper() != normalized_mac}
-                            new_identifiers = {i for i in old_device.identifiers if i[1].replace(":", "").replace("-", "").upper() != normalized_mac}
-                            if not new_connections and not new_identifiers:
-                                _LOGGER.info("Removing empty orphaned device %s (%s)", old_device.name, old_device.id)
+                            dev_entries = get_device_config_entry_ids(old_device)
+                            remaining_entities = [
+                                e for e in er.async_entries_for_device(ent_reg, old_device.id, include_disabled_entities=True)
+                                if e.platform != DOMAIN
+                            ]
+                            is_solely_owned = (
+                                dev_entries == [self.entry_id]
+                                and all(ident[0] == DOMAIN for ident in old_device.identifiers)
+                                and not remaining_entities
+                            )
+                            if is_solely_owned:
+                                _LOGGER.info(
+                                    "Removing solely-owned stale device %s (%s) for MAC %s",
+                                    old_device.name, old_device.id, mac
+                                )
                                 dev_reg.async_remove_device(old_device.id)
                             else:
-                                dev_reg.async_update_device(old_device.id, new_connections=new_connections, new_identifiers=new_identifiers)
+                                _LOGGER.info(
+                                    "Detaching config entry %s from shared device %s (%s) for MAC %s",
+                                    self.entry_id, old_device.name, old_device.id, mac
+                                )
+                                dev_reg.async_update_device(old_device.id, remove_config_entry_id=self.entry_id)
                         
             if not matching_device and name:
                 # Match by normalized name
@@ -2308,7 +2324,22 @@ class TopologyEngine:
                                 _LOGGER.info("Registry cleanup: Removing entity %s for device %s", entity.entity_id, dev.name)
                                 entity_registry.async_remove(entity.entity_id)
                                 
-                        device_registry.async_remove_device(dev.id)
+                        dev_entries = get_device_config_entry_ids(dev)
+                        remaining_entities = [
+                            e for e in er.async_entries_for_device(entity_registry, dev.id, include_disabled_entities=True)
+                            if e.platform != DOMAIN
+                        ]
+                        is_solely_owned = (
+                            dev_entries == [self.entry_id]
+                            and all(ident[0] == DOMAIN for ident in dev.identifiers)
+                            and not remaining_entities
+                        )
+                        if is_solely_owned:
+                            _LOGGER.info("Registry cleanup: Device %s is solely owned by %s. Removing device...", dev.name, DOMAIN)
+                            device_registry.async_remove_device(dev.id)
+                        else:
+                            _LOGGER.info("Registry cleanup: Device %s is shared with other integrations. Detaching config entry %s...", dev.name, self.entry_id)
+                            device_registry.async_update_device(dev.id, remove_config_entry_id=self.entry_id)
                             
             # Dispatch new device signal to ensure any newly added endpoints in merged_nodes are added as device trackers
             from homeassistant.helpers.dispatcher import async_dispatcher_send

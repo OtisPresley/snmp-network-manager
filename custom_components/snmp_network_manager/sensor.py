@@ -22,7 +22,11 @@ async def async_setup_entry(
     from homeassistant.helpers import entity_registry as er
     ent_reg = er.async_get(hass)
     for entity_entry in list(ent_reg.entities.values()):
-        if entity_entry.entity_id.startswith("sensor.snmp_network_topology_"):
+        if (
+            entity_entry.platform == DOMAIN
+            and entity_entry.config_entry_id == entry.entry_id
+            and entity_entry.entity_id.startswith("sensor.snmp_network_topology_")
+        ):
             try:
                 _LOGGER.info("Cleaning up duplicate topology sensor entity from registry: %s", entity_entry.entity_id)
                 ent_reg.async_remove(entity_entry.entity_id)

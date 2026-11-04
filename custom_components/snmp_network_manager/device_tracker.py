@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
-from .topology import get_device_by_mac, format_friendly_name
+from .topology import get_device_by_mac, format_friendly_name, get_device_config_entry_ids
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -181,18 +181,24 @@ class SnmpDeviceTracker(TrackerEntity):
         device = get_device_by_mac(dev_reg, self._mac)
             
         if device:
+            dev_entries = get_device_config_entry_ids(device)
+            is_solely_owned = (
+                dev_entries == [self._entry_id]
+                and all(ident[0] == DOMAIN for ident in device.identifiers)
+            )
             registry_name = device.name_by_user or device.name
             is_mac_name = not registry_name or bool(re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', registry_name))
             
             if is_mac_name and self._name and not re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', self._name):
                 friendly_name = format_friendly_name(self._name)
-                _LOGGER.info("Updating registry device name from '%s' to '%s'", registry_name, friendly_name)
-                dev_reg.async_update_device(device.id, name=friendly_name)
+                if is_solely_owned:
+                    _LOGGER.info("Updating registry device name from '%s' to '%s'", registry_name, friendly_name)
+                    dev_reg.async_update_device(device.id, name=friendly_name)
             else:
                 current_name = registry_name or self._name
                 if current_name:
                     friendly_name = format_friendly_name(current_name)
-                    if friendly_name != current_name and not device.name_by_user:
+                    if friendly_name != current_name and not device.name_by_user and is_solely_owned:
                         _LOGGER.info("Sanitizing registry name from '%s' to '%s'", current_name, friendly_name)
                         dev_reg.async_update_device(device.id, name=friendly_name)
                     else:
@@ -225,28 +231,34 @@ class SnmpDeviceTracker(TrackerEntity):
                     self._name = dev["name"]
                     self._attr_name = dev["name"]
                     
-                    # Update device registry name if it is a MAC address or if the DNS name has changed and the user hasn't overridden it
+                    # Update device registry name only if this integration created and solely owns the device
                     device = get_device_by_mac(dev_reg, self._mac)
                     if device:
-                        registry_name = device.name_by_user or device.name
-                        is_mac_name = not registry_name or bool(re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', registry_name))
-                        
-                        if is_mac_name:
-                            if not re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', dev["name"]):
-                                _LOGGER.info("Updating registry device name on state update from '%s' to '%s'", registry_name, dev["name"])
-                                dev_reg.async_update_device(device.id, name=dev["name"])
-                        elif not device.name_by_user and dev["name"]:
-                            # Verify new name is not a MAC or IP address
-                            is_mac_or_ip = bool(re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', dev["name"])) or dev["name"] == dev.get("ip")
-                            if not is_mac_or_ip:
-                                friendly_name = format_friendly_name(dev["name"])
-                                if friendly_name and friendly_name != device.name:
-                                    _LOGGER.info(
-                                        "Updating registry device name due to DNS change from '%s' to '%s'",
-                                        device.name,
-                                        friendly_name,
-                                    )
-                                    dev_reg.async_update_device(device.id, name=friendly_name)
+                        dev_entries = get_device_config_entry_ids(device)
+                        is_solely_owned = (
+                            dev_entries == [self._entry_id]
+                            and all(ident[0] == DOMAIN for ident in device.identifiers)
+                        )
+                        if is_solely_owned:
+                            registry_name = device.name_by_user or device.name
+                            is_mac_name = not registry_name or bool(re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', registry_name))
+                            
+                            if is_mac_name:
+                                if not re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', dev["name"]):
+                                    _LOGGER.info("Updating registry device name on state update from '%s' to '%s'", registry_name, dev["name"])
+                                    dev_reg.async_update_device(device.id, name=dev["name"])
+                            elif not device.name_by_user and dev["name"]:
+                                # Verify new name is not a MAC or IP address
+                                is_mac_or_ip = bool(re.match(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$', dev["name"])) or dev["name"] == dev.get("ip")
+                                if not is_mac_or_ip:
+                                    friendly_name = format_friendly_name(dev["name"])
+                                    if friendly_name and friendly_name != device.name:
+                                        _LOGGER.info(
+                                            "Updating registry device name due to DNS change from '%s' to '%s'",
+                                            device.name,
+                                            friendly_name,
+                                        )
+                                        dev_reg.async_update_device(device.id, name=friendly_name)
             else:
                 self._state = "not_home"
             self.async_write_ha_state()

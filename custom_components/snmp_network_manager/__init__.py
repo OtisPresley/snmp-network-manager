@@ -1,6 +1,7 @@
 """The SNMP Network Manager integration."""
 
 import asyncio
+import ipaddress
 import logging
 import re
 
@@ -165,6 +166,12 @@ async def websocket_get_topology(
 async def async_ping(ip: str) -> str:
     """Ping an IP address and return latency or status."""
     try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        _LOGGER.error("Invalid IP address for ping: %s", ip)
+        return "Failed"
+
+    try:
         proc = await asyncio.create_subprocess_exec(
             "ping", "-c", "1", "-W", "1", ip,
             stdout=asyncio.subprocess.PIPE,
@@ -194,6 +201,7 @@ async def async_ping(ip: str) -> str:
     vol.Required("exclude_type"): vol.In(["mac", "ip", "name"]),
     vol.Required("value"): vol.Coerce(str),
 })
+@websocket_api.require_admin
 @websocket_api.async_response
 async def websocket_exclude_device(
     hass: HomeAssistant,
@@ -239,6 +247,7 @@ async def websocket_exclude_device(
     vol.Required("type"): "snmp_network_manager/ping_device",
     vol.Required("ip"): vol.Coerce(str),
 })
+@websocket_api.require_admin
 @websocket_api.async_response
 async def websocket_ping_device(
     hass: HomeAssistant,
@@ -251,6 +260,12 @@ async def websocket_ping_device(
         connection.send_error(msg["id"], "invalid_ip", "Invalid or unknown IP address")
         return
         
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        connection.send_error(msg["id"], "invalid_ip", f"Invalid IP address: {ip}")
+        return
+        
     result = await async_ping(ip)
     connection.send_result(msg["id"], {"latency": result})
 
@@ -260,6 +275,7 @@ async def websocket_ping_device(
     vol.Required("mac"): vol.Coerce(str),
     vol.Required("device_id"): vol.Any(None, vol.Coerce(str)),
 })
+@websocket_api.require_admin
 @websocket_api.async_response
 async def websocket_link_device(
     hass: HomeAssistant,
@@ -283,30 +299,39 @@ async def websocket_link_device(
     dev_reg = dr.async_get(hass)
     ent_reg = er.async_get(hass)
     
-    # 1. Update immediate device registry references
+    # 1. Update immediate device registry references for our own entities only
     try:
         if device_id:
-            # Merging: Link MAC to target device registry entry immediately
+            # Merging: Link MAC to target device registry entry
             target_device = dev_reg.async_get(device_id)
             if target_device:
-                # Find old SNMP device
                 old_device = get_device_by_mac(dev_reg, mac)
-                
                 if old_device and old_device.id != target_device.id:
-                    _LOGGER.info("Manual link merging: Reassigning all entities from device %s (MAC: %s) to target device %s", old_device.id, mac, target_device.id)
+                    # Move ONLY our own entities (platform == DOMAIN) to target device
                     old_entities = er.async_entries_for_device(ent_reg, old_device.id, include_disabled_entities=True)
                     for entity in old_entities:
-                        ent_reg.async_update_entity(entity.entity_id, device_id=target_device.id)
+                        if entity.platform == DOMAIN:
+                            _LOGGER.info("Manual link merging: Reassigning SNMP entity %s from device %s (MAC: %s) to target device %s", entity.entity_id, old_device.id, mac, target_device.id)
+                            ent_reg.async_update_entity(entity.entity_id, device_id=target_device.id)
                     
-                    dev_reg.async_remove_device(old_device.id)
-                
-                dev_reg.async_update_device(
-                    target_device.id,
-                    merge_connections={(dr.CONNECTION_NETWORK_MAC, mac.lower())},
-                    merge_identifiers={(DOMAIN, mac.lower())},
-                )
+                    # Only remove old device if solely owned by this integration and no other entities remain
+                    dev_entries = get_device_config_entry_ids(old_device)
+                    remaining_entities = [
+                        e for e in er.async_entries_for_device(ent_reg, old_device.id, include_disabled_entities=True)
+                        if e.platform != DOMAIN
+                    ]
+                    is_solely_owned = (
+                        (not dev_entries or dev_entries == [engine.entry_id])
+                        and all(ident[0] == DOMAIN for ident in old_device.identifiers)
+                    )
+                    if is_solely_owned and not remaining_entities:
+                        _LOGGER.info("Removing solely owned empty device %s (%s)", old_device.name, old_device.id)
+                        dev_reg.async_remove_device(old_device.id)
+                    elif engine.entry_id in dev_entries:
+                        _LOGGER.info("Detaching config entry %s from shared device %s (%s)", engine.entry_id, old_device.name, old_device.id)
+                        dev_reg.async_update_device(old_device.id, remove_config_entry_id=engine.entry_id)
         else:
-            # Unmerging: Find if MAC is currently merged into any non-pure-SNMP target device and remove linkages
+            # Unmerging: Move our own entities off the device if linked
             target_device = None
             for dev in list(dev_reg.devices):
                 has_conn = any(c[1] and c[1].upper() == mac for c in dev.connections)
@@ -318,24 +343,22 @@ async def websocket_link_device(
                         break
             
             if target_device:
-                _LOGGER.info("Manual link unmerging: Removing MAC %s connections/identifiers from target device %s", mac, target_device.id)
-                new_connections = {c for c in target_device.connections if not (c[1] and c[1].upper() == mac)}
-                new_identifiers = {i for i in target_device.identifiers if not (i[0] == DOMAIN and i[1] and i[1].upper() == mac)}
-                
-                # Check if there are other SNMP entities for this device before removing config entry id
-                remaining_entities = [
+                _LOGGER.info("Manual link unmerging: Detaching SNMP entities for MAC %s from target device %s", mac, target_device.id)
+                # Move ONLY our own entities out of the target device in the entity registry
+                snmp_entities = [
                     e for e in er.async_entries_for_device(ent_reg, target_device.id, include_disabled_entities=True)
                     if e.platform == DOMAIN
                 ]
-                
-                dev_reg.async_update_device(
-                    target_device.id,
-                    new_connections=new_connections,
-                    new_identifiers=new_identifiers,
-                )
-                # Move SNMP device tracker/sensor entities out of the target device in the entity registry
-                for entity in remaining_entities:
+                for entity in snmp_entities:
                     ent_reg.async_update_entity(entity.entity_id, device_id=None)
+                
+                # Check if there are other SNMP entities for this device before removing config entry id
+                remaining_snmp_entities = [
+                    e for e in er.async_entries_for_device(ent_reg, target_device.id, include_disabled_entities=True)
+                    if e.platform == DOMAIN
+                ]
+                if not remaining_snmp_entities and engine.entry_id in get_device_config_entry_ids(target_device):
+                    dev_reg.async_update_device(target_device.id, remove_config_entry_id=engine.entry_id)
     except Exception as err:
         _LOGGER.error("Failed to update registry during manual linkage change: %s", err)
         
