@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-11-05
+
+### Fixed
+- 🔤 **Comprehensive Attribute XSS Escaping**: 
+  - Escaped DOM element `id` attributes (`hoverId`, `edgeId`, `nodeKey`) in `snmp-network-manager-card.js` for SVG map node and edge elements to prevent potential attribute breakout and script execution from arbitrary remote LLDP system names (`device:<sysName>`).
+  - Escaped `icon` attribute bindings in `<ha-icon>` elements for custom icons, device icons, child icons, and switch icons.
+  - Escaped search query `value` attributes in list and grouped search bars.
+
+---
+
 ## [0.1.3] - 2026-11-04
 
 ### Fixed

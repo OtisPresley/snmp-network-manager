@@ -11,7 +11,7 @@ function escapeHtml(str) {
 class SnmpNetworkManagerCard extends HTMLElement {
   constructor() {
     super();
-    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.3", "color: #ff9800; font-weight: bold;", "color: default;");
+    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.4", "color: #ff9800; font-weight: bold;", "color: default;");
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
@@ -2603,7 +2603,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
           </div>
           
           <div class="search-bar">
-            <input type="text" id="list-search" placeholder="Search devices..." value="${this._searchQuery || ''}" />
+            <input type="text" id="list-search" placeholder="Search devices..." value="${escapeHtml(this._searchQuery || '')}" />
           </div>
           
           <table class="device-table">
@@ -2626,7 +2626,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
                 return `
                   <tr class="device-row" data-id="${escapeHtml(item.id)}">
                     <td class="device-name">
-                      <ha-icon icon="${item.icon}" class="device-icon ${item.isDown ? 'down' : (item.isAsleep ? 'asleep' : (item.isAway ? 'away' : ''))}"></ha-icon>
+                      <ha-icon icon="${escapeHtml(item.icon)}" class="device-icon ${item.isDown ? 'down' : (item.isAsleep ? 'asleep' : (item.isAway ? 'away' : ''))}"></ha-icon>
                       <span>${escapeHtml(item.name)}</span>${unlinkedHtml}
                     </td>
                     <td>${escapeHtml(item.type)}</td>
@@ -2908,7 +2908,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
           </div>
 
           <div class="search-bar">
-            <input type="text" id="grouped-search" placeholder="Search devices..." value="${this._searchQuery || ''}" />
+            <input type="text" id="grouped-search" placeholder="Search devices..." value="${escapeHtml(this._searchQuery || '')}" />
           </div>
  
           ${filteredGroups.map(({ parentId, parentNode, children }) => {
@@ -2926,7 +2926,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
             return `
               <div class="switch-group" data-id="${escapeHtml(parentId)}">
                 <div class="switch-header">
-                  <ha-icon icon="${icon}" class="switch-icon"></ha-icon>
+                  <ha-icon icon="${escapeHtml(icon)}" class="switch-icon"></ha-icon>
                   <span>${escapeHtml(parentNode.attrs?.name || parentId)}</span>
                   <span style="font-size: 0.8rem; font-weight: normal; color: var(--secondary-text-color); margin-left: 8px;">
                     (${children.length} connected)
@@ -2962,7 +2962,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
                             <span class="dev-name">${escapeHtml(name)}${unlinkedHtml}</span>
                             <span class="dev-ip">${escapeHtml(ip)}</span>
                           </div>
-                          <ha-icon icon="${childIcon}" style="color: ${iconColor};" class="device-icon ${state === 'down' ? 'down' : (state === 'asleep' ? 'asleep' : (state === 'away' ? 'away' : ''))}"></ha-icon>
+                          <ha-icon icon="${escapeHtml(childIcon)}" style="color: ${iconColor};" class="device-icon ${state === 'down' ? 'down' : (state === 'asleep' ? 'asleep' : (state === 'away' ? 'away' : ''))}"></ha-icon>
                         </div>
                       `;
                     }).join('')}
@@ -3066,8 +3066,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
       const hoverId = `edge-hover-${edge.src.replace(/:/g, '_')}-${edge.dst.replace(/:/g, '_')}`;
       
       return `
-        <line class="edge-hover" id="${hoverId}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}" stroke="rgba(0,0,0,0.01)" stroke-width="15" style="cursor: pointer; pointer-events: stroke;"><title>${escapeHtml(title)}</title></line>
-        <line class="edge ${edge.kind}${speedClass}" id="${edgeId}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}"><title>${escapeHtml(title)}</title></line>
+        <line class="edge-hover" id="${escapeHtml(hoverId)}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}" stroke="rgba(0,0,0,0.01)" stroke-width="15" style="cursor: pointer; pointer-events: stroke;"><title>${escapeHtml(title)}</title></line>
+        <line class="edge ${escapeHtml(edge.kind)}${speedClass}" id="${escapeHtml(edgeId)}" x1="${src.x}" y1="${src.y}" x2="${dst.x}" y2="${dst.y}"><title>${escapeHtml(title)}</title></line>
       `;
     }).join('');
 
@@ -3145,13 +3145,13 @@ class SnmpNetworkManagerCard extends HTMLElement {
       const nodeKey = `node-${id.replace(/:/g, '_')}`;
       if (node.kind === 'device') {
         return `
-          <g class="node ${specificKind} ${stateClass} ${unlinkedClass}" id="${nodeKey}" transform="translate(${node.x},${node.y})" data-id="${escapeHtml(id)}">
+          <g class="node ${specificKind} ${stateClass} ${unlinkedClass}" id="${escapeHtml(nodeKey)}" transform="translate(${node.x},${node.y})" data-id="${escapeHtml(id)}">
             <title>${escapeHtml(hoverText)}${escapeHtml(clientCountStr)}</title>
             <circle r="${radius}"></circle>
             <foreignObject x="-${radius * 0.8}" y="-${radius * 0.8}" width="${radius * 1.6}" height="${radius * 1.6}">
               ${isImage ? 
-                `<img src="${encodeURI(icon)}" style="width: 100%; height: 100%; border-radius: 50%;" />` :
-                `<ha-icon icon="${icon}" style="--mdc-icon-size: ${radius * 1.6}px; display: flex; align-items: center; justify-content: center;"></ha-icon>`
+                `<img src="${escapeHtml(encodeURI(icon))}" style="width: 100%; height: 100%; border-radius: 50%;" />` :
+                `<ha-icon icon="${escapeHtml(icon)}" style="--mdc-icon-size: ${radius * 1.6}px; display: flex; align-items: center; justify-content: center;"></ha-icon>`
               }
             </foreignObject>
             ${showText ? `<text dx="${radius + 5}" dy="4">${escapeHtml(displayName)}${escapeHtml(clientCountStr)}</text>` : ''}
@@ -3159,7 +3159,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
         `;
       } else {
         return `
-          <g class="node endpoint ${stateClass} ${unlinkedClass}" id="${nodeKey}" transform="translate(${node.x},${node.y})" data-id="${escapeHtml(id)}">
+          <g class="node endpoint ${stateClass} ${unlinkedClass}" id="${escapeHtml(nodeKey)}" transform="translate(${node.x},${node.y})" data-id="${escapeHtml(id)}">
             <title>${escapeHtml(hoverText)}</title>
             <circle r="${radius}"></circle>
             ${showText ? `<text dx="${radius + 5}" dy="4">${escapeHtml(displayName)}</text>` : ''}
