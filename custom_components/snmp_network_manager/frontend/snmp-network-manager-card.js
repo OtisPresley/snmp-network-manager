@@ -8,10 +8,20 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+// Card config values are interpolated into <style>/style= templates, so validate them first.
+function safeColor(value, fallback) {
+  return (typeof value === 'string' && CSS.supports('color', value)) ? value : fallback;
+}
+
+function safeDimension(value, fallback) {
+  const num = Number(value);
+  return (Number.isFinite(num) && num > 0) ? num : fallback;
+}
+
 class SnmpNetworkManagerCard extends HTMLElement {
   constructor() {
     super();
-    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.4", "color: #ff9800; font-weight: bold;", "color: default;");
+    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.5", "color: #ff9800; font-weight: bold;", "color: default;");
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
@@ -120,13 +130,13 @@ class SnmpNetworkManagerCard extends HTMLElement {
     if (!this.shadowRoot || !this._config) return;
     const cardEl = this.shadowRoot.querySelector('ha-card');
     if (cardEl) {
-      const gatewayColor = this._config.gateway_color || '#d500f9';
-      const switchColor = this._config.switch_color || '#00e5ff';
-      const apColor = this._config.ap_color || '#00e5ff';
-      const endpointColor = this._config.endpoint_color || '#00e676';
-      const downColor = this._config.down_color || '#ff0000';
-      const asleepColor = this._config.asleep_color || '#ffb300';
-      const awayColor = this._config.away_color || '#b388ff';
+      const gatewayColor = safeColor(this._config.gateway_color, '#d500f9');
+      const switchColor = safeColor(this._config.switch_color, '#00e5ff');
+      const apColor = safeColor(this._config.ap_color, '#00e5ff');
+      const endpointColor = safeColor(this._config.endpoint_color, '#00e676');
+      const downColor = safeColor(this._config.down_color, '#ff0000');
+      const asleepColor = safeColor(this._config.asleep_color, '#ffb300');
+      const awayColor = safeColor(this._config.away_color, '#b388ff');
       
       cardEl.style.setProperty('--gateway-color', gatewayColor);
       cardEl.style.setProperty('--switch-color', switchColor);
@@ -403,8 +413,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
     const baseLayout = savedLayoutObj.base || 'clustered';
     
     const fill = this._config.fill !== false;
-    const width = fill ? this._width : (this._config.width || 1000);
-    const height = fill ? this._height : (this._config.height || 600);
+    const width = fill ? this._width : safeDimension(this._config.width, 1000);
+    const height = fill ? this._height : safeDimension(this._config.height, 600);
     
     const isCustom = !['clustered', 'concentric', 'force', 'grid'].includes(this._layoutMode);
     const layoutToRun = isCustom ? baseLayout : this._layoutMode;
@@ -1193,8 +1203,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
     const customLayoutNames = Object.keys(allLayouts).filter(m => !['clustered', 'concentric', 'force', 'grid'].includes(m));
     
     const fill = this._config.fill !== false;
-    const width = fill ? this._width : (this._config.width || 1000);
-    const height = fill ? this._height : (this._config.height || 600);
+    const width = fill ? this._width : safeDimension(this._config.width, 1000);
+    const height = fill ? this._height : safeDimension(this._config.height, 600);
     
     let svgStyle = '';
     if (fill) {
@@ -1203,13 +1213,13 @@ class SnmpNetworkManagerCard extends HTMLElement {
       svgStyle = `width: ${width}px; height: ${height}px;`;
     }
 
-    const gatewayColor = this._config.gateway_color || '#d500f9';
-    const switchColor = this._config.switch_color || '#00e5ff';
-    const apColor = this._config.ap_color || '#00e5ff';
-    const endpointColor = this._config.endpoint_color || '#00e676';
-    const downColor = this._config.down_color || '#ff0000';
-    const asleepColor = this._config.asleep_color || '#ffb300';
-    const awayColor = this._config.away_color || '#b388ff';
+    const gatewayColor = safeColor(this._config.gateway_color, '#d500f9');
+    const switchColor = safeColor(this._config.switch_color, '#00e5ff');
+    const apColor = safeColor(this._config.ap_color, '#00e5ff');
+    const endpointColor = safeColor(this._config.endpoint_color, '#00e676');
+    const downColor = safeColor(this._config.down_color, '#ff0000');
+    const asleepColor = safeColor(this._config.asleep_color, '#ffb300');
+    const awayColor = safeColor(this._config.away_color, '#b388ff');
 
     if (!this.shadowRoot.querySelector('svg')) {
       this.shadowRoot.innerHTML = `
@@ -1539,8 +1549,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
     const svg = this.shadowRoot.querySelector('svg');
     
     const fill = this._config?.fill !== false;
-    const width = fill ? 1000 : (this._config?.width || 1000);
-    const height = fill ? 600 : (this._config?.height || 600);
+    const width = fill ? 1000 : safeDimension(this._config?.width, 1000);
+    const height = fill ? 600 : safeDimension(this._config?.height, 600);
     
     this._zoom = parseFloat(localStorage.getItem('snmp_map_zoom')) || 0.95;
     
@@ -1595,8 +1605,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
     this.shadowRoot.getElementById('btn-reset-zoom').addEventListener('click', () => { 
       this._zoom = 0.95; 
       const fill = this._config?.fill !== false;
-      const width = fill ? this._width : (this._config?.width || 1000);
-      const height = fill ? this._height : (this._config?.height || 600);
+      const width = fill ? this._width : safeDimension(this._config?.width, 1000);
+      const height = fill ? this._height : safeDimension(this._config?.height, 600);
       this._panX = (width - width * 0.95) / 2; 
       this._panY = (height - height * 0.95) / 2; 
       this._updateTransform(); 
@@ -1969,8 +1979,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
       return s;
     };
 
-    const asleepColor = this._config?.asleep_color || '#ffb300';
-    const awayColor = this._config?.away_color || '#b388ff';
+    const asleepColor = safeColor(this._config?.asleep_color, '#ffb300');
+    const awayColor = safeColor(this._config?.away_color, '#b388ff');
 
     // Construct history sections
     let historyHtml = '';
@@ -2327,8 +2337,8 @@ class SnmpNetworkManagerCard extends HTMLElement {
       return;
     }
     
-    const asleepColor = this._config.asleep_color || '#ffb300';
-    const awayColor = this._config.away_color || '#b388ff';
+    const asleepColor = safeColor(this._config.asleep_color, '#ffb300');
+    const awayColor = safeColor(this._config.away_color, '#b388ff');
     const showUnlinked = this._config.show_unlinked_indicator !== false;
     
     // Toggle container display and Map counts

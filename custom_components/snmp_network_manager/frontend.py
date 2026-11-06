@@ -79,7 +79,7 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
         version = integration.version
     except Exception as err:
         _LOGGER.warning("Could not retrieve integration version: %s", err)
-        version = "0.1.4"
+        version = "0.1.5"
 
     url = f"{URL_BASE}/{CARD_FILENAME}?v={version}"
 
