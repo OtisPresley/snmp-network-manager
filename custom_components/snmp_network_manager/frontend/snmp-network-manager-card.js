@@ -21,7 +21,7 @@ function safeDimension(value, fallback) {
 class SnmpNetworkManagerCard extends HTMLElement {
   constructor() {
     super();
-    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.5", "color: #ff9800; font-weight: bold;", "color: default;");
+    console.log("%c[SNMP Network Map] %cInitializing card bundle - Version 0.1.6", "color: #ff9800; font-weight: bold;", "color: default;");
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._config = null;
@@ -439,9 +439,15 @@ class SnmpNetworkManagerCard extends HTMLElement {
     // Apply saved positions
     if (isCustom) {
       Object.entries(savedLayout).forEach(([id, pos]) => {
-        if (this._nodes[id]) {
-          this._nodes[id].x = pos.x;
-          this._nodes[id].y = pos.y;
+        if (this._nodes[id] && pos && typeof pos === 'object') {
+          const hasX = pos.x !== null && pos.x !== undefined && pos.x !== '';
+          const hasY = pos.y !== null && pos.y !== undefined && pos.y !== '';
+          const x = hasX ? Number(pos.x) : NaN;
+          const y = hasY ? Number(pos.y) : NaN;
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            this._nodes[id].x = x;
+            this._nodes[id].y = y;
+          }
         }
       });
     }
@@ -2204,7 +2210,7 @@ class SnmpNetworkManagerCard extends HTMLElement {
 
         <div style="margin-top: 20px;">
           ${deviceId ? `
-            <a href="/config/devices/device/${deviceId}" target="_blank" class="btn-ha-link">
+            <a href="/config/devices/device/${escapeHtml(encodeURIComponent(deviceId))}" target="_blank" class="btn-ha-link">
               Open Home Assistant Device Page
             </a>
           ` : `

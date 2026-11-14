@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-11-14
+
+### Fixed
+- 🔤 **Saved Layout Coordinate Validation (`snmp-network-manager-card.js`)**: Coerced saved layout `x` and `y` coordinates with `Number()` and skipped non-finite values in `_calculateLayout` before interpolating them into SVG `x1`/`y1`/`x2`/`y2` and `transform` attributes, and escaped `deviceId` in device link `href` attributes.
+- 🔗 **Consistent MAC Normalization (`__init__.py`)**: Used shared `normalize_mac()` in `websocket_link_device` when matching device registry connections/identifiers and normalizing stored manual mappings.
+- 📡 **Offline State Resolution for Devices Without Companion App & ARP Cache (`topology.py`)**:
+  - Excluded non-GPS router/network `device_tracker` entities in `not_home`/`away` state from setting `ha_available = True` in `resolve_device_state()`, preventing laptops and phones without the Home Assistant Companion App or GPS tracking from showing as `Away` instead of `Offline` (`down`) when disconnected from the network.
+  - Stopped adding switch ARP cache entries to `active_macs` during topology collection so recently shut-down or disconnected devices with stale switch ARP entries are properly ping-checked and transition to `Offline` (`down`) instead of remaining `Online` (`up`).
+- 🔄 **Startup Polling Recovery (`sensor.py`)**: Rescheduled the initial 10-second polling timer in `_schedule_next_update` when Home Assistant is still starting up (`not self.hass.is_running`), preventing background topology polling from stopping permanently on slower startups.
+- 🛡️ **Service Device Exclusion & Gateway FDB Linking (`topology.py`)**: Excluded Home Assistant `service` devices (`entry_type == "service"`, such as UniFi WLAN entries) from physical hardware device correlation so gateways like `hades.otispresley.com` are not renamed to domain service names, and linked gateways discovered in switch FDBs when no LLDP edge exists.
+
 ## [0.1.5] - 2026-11-06
 
 ### Fixed

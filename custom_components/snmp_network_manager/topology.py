@@ -279,6 +279,9 @@ def is_hardware_integration_device(dev) -> bool:
     """Check if a device has identifiers from a physical hardware integration (ignoring SNMP and package managers)."""
     if not dev:
         return False
+    entry_type = getattr(dev, "entry_type", None)
+    if entry_type == dr.DeviceEntryType.SERVICE or entry_type == "service":
+        return False
     idents = getattr(dev, "identifiers", None)
     if not idents:
         return True
@@ -543,14 +546,21 @@ def resolve_device_state(hass: HomeAssistant, matching_device, dev_entities, cur
             continue
 
         st = ent_state.state
+        domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
         if st not in ["unavailable", "unknown"]:
-            ha_available = True
-            domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
+            # A non-GPS device_tracker (router/network/bluetooth) reporting not_home/away
+            # means the device is unreachable on the network, not that HA has live telemetry.
+            is_away_network_tracker = (
+                domain == "device_tracker"
+                and ent_state.attributes.get("source_type") != "gps"
+                and st in ["not_home", "away"]
+            )
+            if not is_away_network_tracker:
+                ha_available = True
             if domain in ("media_player", "vacuum", "climate", "switch", "light"):
                 if st in ["off", "standby", "idle", "paused"]:
                     is_standby = True
 
-        domain = getattr(ent, "domain", None) or ent.entity_id.split(".")[0]
         ent_id_lower = ent.entity_id.lower()
 
         # 1. Device Trackers
@@ -747,6 +757,8 @@ class TopologyEngine:
         
         # Populate switch interface MACs from Device Registry connections first
         known_macs = set()
+        known_mac_to_switch_id = {}
+        pending_gateway_fdb_links = []
         for dev in dev_reg.devices:
             is_switch = False
             for entry_id in get_device_config_entry_ids(dev):
@@ -791,7 +803,6 @@ class TopologyEngine:
                     if mac:
                         mac_upper = mac.upper()
                         mac_to_ip[mac_upper] = ip
-                        active_macs.add(mac_upper)
 
             # Fetch base MAC and add to known_macs
             base_mac_val = data.get("base_mac")
@@ -799,6 +810,7 @@ class TopologyEngine:
                 base_mac = parse_mac(base_mac_val)
                 if base_mac:
                     known_macs.add(base_mac.upper())
+                    known_mac_to_switch_id[base_mac.upper()] = f"device:{name}"
                 
             # Fetch all network interface MACs for this switch using ifPhysAddress
             if_macs = data.get("if_macs") or []
@@ -808,6 +820,7 @@ class TopologyEngine:
                 if if_mac:
                     if_mac_upper = if_mac.upper()
                     known_macs.add(if_mac_upper)
+                    known_mac_to_switch_id[if_mac_upper] = f"device:{name}"
                     parsed_macs.append(if_mac_upper)
             _LOGGER.info("Fetched %d interface MACs for %s: %s", len(parsed_macs), name, parsed_macs)
 
@@ -1119,9 +1132,7 @@ class TopologyEngine:
                         mac = ":".join([f"{int(p):02X}" for p in mac_parts])
                         mac_upper = mac.upper()
                         active_macs.add(mac_upper)
-                        if mac_upper in known_macs:
-                            continue
-                            
+
                         port = int(val)
                         if_idx = baseport_map.get(port)
                         
@@ -1129,6 +1140,13 @@ class TopologyEngine:
                             port_name = ifname_map.get(if_idx, str(port))
                         else:
                             port_name = ifname_map.get(port, str(port))
+
+                        if mac_upper in known_macs:
+                            target_switch_id = known_mac_to_switch_id.get(mac_upper)
+                            if target_switch_id and target_switch_id != switch_id:
+                                speed_mbps = ifspeed_map.get(if_idx) if if_idx is not None else ifspeed_map.get(port)
+                                pending_gateway_fdb_links.append((switch_id, target_switch_id, port_name, speed_mbps))
+                            continue
                         
                         endpoint_id = f"endpoint:{mac_upper}"
                         ip = mac_to_ip.get(mac_upper, "Unknown")
@@ -1262,6 +1280,29 @@ class TopologyEngine:
                 _LOGGER.error("Failed to fetch FDB from %s: %s", name, e)
                 
         _LOGGER.info("PORT TO NEIGHBOR MAP: %s", {f"{k[0]}:{k[1]}": v for k, v in port_to_neighbor.items()})
+
+        # Link gateways discovered in switch FDBs when no LLDP edge already connects them
+        for src_sw, dst_gw, p_name, speed_mbps in pending_gateway_fdb_links:
+            if not nodes.get(dst_gw, {}).get("attrs", {}).get("is_gateway"):
+                continue
+            if (src_sw, p_name) in port_to_neighbor:
+                continue
+            already_linked = any(
+                (e.get("src") == src_sw and e.get("dst") == dst_gw)
+                or (e.get("src") == dst_gw and e.get("dst") == src_sw)
+                for e in edges
+            )
+            if not already_linked:
+                edge_attrs = {"bridge_port": p_name}
+                if speed_mbps is not None:
+                    edge_attrs["speed"] = speed_mbps
+                edges.append({
+                    "kind": "fdb",
+                    "src": src_sw,
+                    "dst": dst_gw,
+                    "attrs": edge_attrs,
+                })
+                _LOGGER.debug("Linked gateway %s to %s on port %s via FDB", dst_gw, src_sw, p_name)
 
         # Persistence: Use stored nodes and edges
         stored_nodes = stored_data.get("nodes", {})

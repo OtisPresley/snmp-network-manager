@@ -103,6 +103,8 @@ class SnmpNetworkTopologySensor(SensorEntity):
         async def trigger_update(_now):
             if self.hass.is_running:
                 self.async_schedule_update_ha_state(True)
+            else:
+                self._schedule_next_update(10)
                 
         async_call_later(self.hass, delay, trigger_update)
 

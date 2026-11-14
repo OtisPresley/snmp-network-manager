@@ -426,6 +426,50 @@ class TestCorrelation(unittest.TestCase):
         state = resolve_device_state(self.hass, phone_dev, [gps_tracker], "down")
         self.assertEqual(state, "down")
 
+    def test_laptop_without_mobile_app_down_when_router_not_home(self):
+        # Laptop without HA companion app/GPS whose router tracker is not_home -> down (not away)
+        laptop_dev = MockDevice("dev_laptop", "Amy Worklaptop")
+        unifi_tracker = MockEntity("device_tracker.amy_worklaptop_wifi", "dev_laptop", "unifi", "u_unifi")
+
+        def mock_get(eid):
+            m = MagicMock()
+            m.state = "not_home"
+            m.attributes = {"source_type": "router"}
+            return m
+
+        self.hass.states.get = mock_get
+        state = resolve_device_state(self.hass, laptop_dev, [unifi_tracker], "down")
+        self.assertEqual(state, "down")
+
+    def test_phone_without_mobile_app_down_when_router_not_home_even_if_stale_arp(self):
+        # Phone without HA companion app/GPS whose router tracker is not_home -> down even if stale ARP says up
+        phone_dev = MockDevice("dev_workphone", "Jamie Workphone")
+        unifi_tracker = MockEntity("device_tracker.jamie_workphone", "dev_workphone", "unifi", "u_unifi")
+
+        def mock_get(eid):
+            m = MagicMock()
+            m.state = "not_home"
+            m.attributes = {"source_type": "router"}
+            return m
+
+        self.hass.states.get = mock_get
+        state = resolve_device_state(self.hass, phone_dev, [unifi_tracker], "up")
+        self.assertEqual(state, "down")
+
+    def test_find_correlated_device_ignores_service_entries(self):
+        # Service entry (e.g. UniFi WLAN "otispresley.com") must not match physical gateway "hades.otispresley.com"
+        wlan_service = MockDevice("unifi_wlan", "otispresley.com", manufacturer="Ubiquiti Networks", model="UniFi WLAN")
+        wlan_service.entry_type = "service"
+        wlan_service.identifiers = {("unifi", "62e704fa7d321d0019790103")}
+
+        pfsense_gw = MockDevice("pfsense_gw", "Hades", manufacturer="netgate", model="pfSense")
+        pfsense_gw.entry_type = None
+        pfsense_gw.identifiers = {("pfsense", "bc501f67f8565c3bdc18")}
+
+        self.dev_reg.devices = [wlan_service, pfsense_gw]
+        matched = find_correlated_device(self.hass, "", "10.0.12.254", "hades.otispresley.com")
+        self.assertNotEqual(matched.id if matched else None, "unifi_wlan")
+
     def test_read_local_arp_executor(self):
         import asyncio
         from unittest.mock import patch, mock_open

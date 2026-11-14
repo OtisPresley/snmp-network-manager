@@ -333,9 +333,10 @@ async def websocket_link_device(
         else:
             # Unmerging: Move our own entities off the device if linked
             target_device = None
+            mac_norm = normalize_mac(mac)
             for dev in list(dev_reg.devices):
-                has_conn = any(c[1] and c[1].upper() == mac for c in dev.connections)
-                has_ident = any(i[0] == DOMAIN and i[1] and i[1].upper() == mac for i in dev.identifiers)
+                has_conn = any(c[1] and normalize_mac(c[1]) == mac_norm for c in dev.connections)
+                has_ident = any(i[0] == DOMAIN and i[1] and normalize_mac(i[1]) == mac_norm for i in dev.identifiers)
                 if has_conn or has_ident:
                     is_pure_snmp = dev.identifiers and all(ident[0] in (DOMAIN, "snmp_switch_manager") for ident in dev.identifiers)
                     if not is_pure_snmp:
@@ -368,11 +369,11 @@ async def websocket_link_device(
     
     # Normalize existing manual mappings in the store to ensure consistency
     normalized_mappings = {
-        k.replace(":", "").replace("-", "").upper(): v
+        normalize_mac(k): v
         for k, v in manual_device_mappings.items()
     }
     
-    mac_key = mac.replace(":", "").replace("-", "").upper()
+    mac_key = normalize_mac(mac)
     if not device_id:
         normalized_mappings[mac_key] = "unlinked"
     else:
